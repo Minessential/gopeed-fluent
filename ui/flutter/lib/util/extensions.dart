@@ -1,21 +1,21 @@
 import 'dart:core';
-import 'package:checkable_treeview/checkable_treeview.dart';
-import 'package:flutter/material.dart';
+import 'package:checkable_treeview_fluent/checkable_treeview.dart';
+import 'package:flutter/widgets.dart';
 import '../api/model/resource.dart';
 import '../app/views/file_icon.dart';
 import 'util.dart';
 
 extension ListFileInfoExtension on List<FileInfo> {
-  List<TreeNode<int>> toTreeNodes() {
-    final List<TreeNode<int>> rootNodes = [];
-    final Map<String, TreeNode<int>> dirNodes = {};
+  List<FluentTreeNode<int>> toTreeNodes() {
+    final List<FluentTreeNode<int>> rootNodes = [];
+    final Map<String, FluentTreeNode<int>> dirNodes = {};
     var nodeIndex = 0;
 
     for (var i = 0; i < length; i++) {
       final file = this[i];
       final parts = file.path.split('/');
       String currentPath = '';
-      TreeNode<int>? parentNode;
+      FluentTreeNode<int>? parentNode;
 
       // Create or get directory nodes
       for (final part in parts) {
@@ -23,19 +23,13 @@ extension ListFileInfoExtension on List<FileInfo> {
 
         currentPath += '/$part';
         if (!dirNodes.containsKey(currentPath)) {
-          final node = TreeNode<int>(
+          final node = FluentTreeNode<int>(
             value: nodeIndex++,
             label: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(file.name),
-                Text(Util.fmtByte(file.size)),
-              ],
+              children: [Text(file.name), Text(Util.fmtByte(file.size))],
             ),
-            icon: Icon(
-              fileIcon(part, isFolder: true),
-              size: 18,
-            ),
+            icon: Icon(fileIcon(part, isFolder: true), size: 18),
             children: [],
           );
           dirNodes[currentPath] = node;
@@ -50,14 +44,11 @@ extension ListFileInfoExtension on List<FileInfo> {
       }
 
       // Create file node using file.name
-      final fileNode = TreeNode<int>(
+      final fileNode = FluentTreeNode<int>(
         value: nodeIndex++,
         label: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(file.name),
-            Text(Util.fmtByte(file.size)),
-          ],
+          children: [Text(file.name), Text(Util.fmtByte(file.size))],
         ),
         icon: Icon(fileIcon(file.name, isFolder: false), size: 18),
         children: [],

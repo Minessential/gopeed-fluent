@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 Locale toLocale(String key) {
   final arr = key.split('_');

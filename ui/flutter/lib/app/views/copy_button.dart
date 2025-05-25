@@ -1,12 +1,13 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart' hide FluentIcons;
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/services.dart';
 
 import '../../util/message.dart';
 
 class CopyButton extends StatefulWidget {
   final String? url;
-
-  const CopyButton(this.url, {Key? key}) : super(key: key);
+  final double size;
+  const CopyButton(this.url, {super.key, this.size = 20});
 
   @override
   State<CopyButton> createState() => _CopyButtonState();
@@ -23,13 +24,13 @@ class _CopyButtonState extends State<CopyButton> {
         setState(() {
           success = true;
         });
-        Future.delayed(const Duration(milliseconds: 300), () {
+        Future.delayed(const Duration(milliseconds: 500), () {
           setState(() {
             success = false;
           });
         });
       } catch (e) {
-        showErrorMessage(e);
+        showErrorMessage(context, e);
       }
     }
   }
@@ -37,7 +38,9 @@ class _CopyButtonState extends State<CopyButton> {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      icon: success ? const Icon(Icons.check_circle) : const Icon(Icons.copy),
+      icon: success
+          ? Icon(FluentIcons.checkmark_32_regular, size: widget.size)
+          : Icon(FluentIcons.copy_32_regular, size: widget.size),
       onPressed: copy,
     );
   }

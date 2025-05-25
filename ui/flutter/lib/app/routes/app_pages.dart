@@ -18,6 +18,8 @@ import '../modules/task/bindings/task_binding.dart';
 import '../modules/task/bindings/task_files_binding.dart';
 import '../modules/task/views/task_files_view.dart';
 import '../modules/task/views/task_view.dart';
+import '../modules/task/bindings/task_done_binding.dart';
+import '../modules/task/views/task_done_view.dart';
 
 part 'app_routes.dart';
 
@@ -26,63 +28,71 @@ class AppPages {
 
   static final routes = [
     GetPage(
-        name: _Paths.ROOT,
-        participatesInRootNavigator: true,
-        transition: Transition.topLevel,
-        // preventDuplicates: true,
-        page: () => const RootView(),
-        binding: RootBinding(),
-        children: [
-          GetPage(
-              name: _Paths.HOME,
-              // participatesInRootNavigator: true,
-              // transition: Transition.topLevel,
-              // preventDuplicates: true,
-              page: () => const HomeView(),
-              binding: HomeBinding(),
+      name: _Paths.ROOT,
+      participatesInRootNavigator: true,
+      transition: Transition.topLevel,
+      // preventDuplicates: true,
+      page: () => const RootView(),
+      binding: RootBinding(),
+      children: [
+        GetPage(
+          name: _Paths.HOME,
+          // participatesInRootNavigator: true,
+          // transition: Transition.topLevel,
+          // preventDuplicates: true,
+          page: () => const HomeView(),
+          binding: HomeBinding(),
+          children: [
+            GetPage(
+              name: _Paths.TASK,
+              page: () => const TaskView(),
+              transition: Transition.fade,
+              binding: TaskBinding(),
               children: [
                 GetPage(
-                    name: _Paths.TASK,
-                    page: () => const TaskView(),
-                    transition: Transition.noTransition,
-                    binding: TaskBinding(),
-                    children: [
-                      GetPage(
-                          name: _Paths.TASK_FILES,
-                          page: () => const TaskFilesView(),
-                          transition: Transition.noTransition,
-                          binding: TaskFilesBinding()),
-                    ]),
-                GetPage(
-                    name: _Paths.EXTENSION,
-                    page: () => ExtensionView(),
-                    transition: Transition.noTransition,
-                    binding: ExtensionBinding()),
-                GetPage(
-                  name: _Paths.SETTING,
-                  page: () => const SettingView(),
-                  transition: Transition.noTransition,
-                  binding: SettingBinding(),
+                  name: _Paths.TASK_FILES,
+                  page: () => const TaskFilesView(),
+                  transition: Transition.fade,
+                  binding: TaskFilesBinding(),
                 ),
-              ]),
-          GetPage(
-            name: _Paths.LOGIN,
-            page: () => const LoginView(),
-            binding: LoginBinding(),
-            transition: Transition.fadeIn,
-          ),
-          GetPage(
-            name: _Paths.CREATE,
-            transition: Transition.downToUp,
-            // preventDuplicates: true,
-            page: () => CreateView(),
-            binding: CreateBinding(),
-          ),
-          GetPage(
-            name: _Paths.REDIRECT,
-            page: () => const RedirectView(),
-            binding: RedirectBinding(),
-          ),
-        ]),
+              ],
+            ),
+            GetPage(
+              name: _Paths.LOGIN,
+              page: () => const LoginView(),
+              binding: LoginBinding(),
+              transition: Transition.fadeIn,
+            ),
+            GetPage(
+              name: _Paths.CREATE,
+              transition: Transition.fade,
+              // preventDuplicates: true,
+              page: () => CreateView(),
+              binding: CreateBinding(),
+            ),
+            GetPage(
+              name: _Paths.TASK_DONE,
+              page: () => const TaskDoneView(),
+              binding: TaskDoneBinding(),
+              transition: Transition.fade,
+            ),
+            GetPage(
+              name: _Paths.EXTENSION,
+              page: () => ExtensionView(),
+              transition: Transition.fade,
+              binding: ExtensionBinding(),
+            ),
+            GetPage(
+              name: _Paths.SETTING,
+              page: () => const SettingView(),
+              transition: Transition.fade,
+              binding: SettingBinding(),
+            ),
+          ],
+        ),
+
+        GetPage(name: _Paths.REDIRECT, page: () => const RedirectView(), binding: RedirectBinding()),
+      ],
+    ),
   ];
 }

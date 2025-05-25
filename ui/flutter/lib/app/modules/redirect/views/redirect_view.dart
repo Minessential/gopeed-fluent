@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 
 import '../controllers/redirect_controller.dart';
@@ -19,8 +19,7 @@ class RedirectView extends GetView<RedirectController> {
     // Waiting for previous page controller to delete, avoid deleting controller that route page after redirect
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Future.delayed(const Duration(milliseconds: 350));
-      Get.rootDelegate
-          .offAndToNamed(redirectArgs.page, arguments: redirectArgs.arguments);
+      Get.rootDelegate.offAndToNamed(redirectArgs.page, arguments: redirectArgs.arguments);
     });
     return const SizedBox();
   }

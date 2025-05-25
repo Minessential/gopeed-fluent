@@ -2,13 +2,18 @@ import 'dart:io';
 
 import 'package:badges/badges.dart' as badges;
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart' hide FluentIcons;
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_form_builder/flutter_form_builder.dart';
 import 'package:form_builder_validators/form_builder_validators.dart';
 import 'package:get/get.dart';
+import 'package:gopeed/app/views/filled_button_loading.dart';
+import 'package:gopeed/app/views/fluent/base_pane_body.dart';
+import 'package:gopeed/app/views/fluent/universal_list_item.dart';
+import 'package:gopeed/app/views/fluent/universal_pane_child.dart';
+import 'package:gopeed/theme/theme.dart';
 import 'package:path/path.dart' as path;
-import 'package:rounded_loading_button_plus/rounded_loading_button.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../api/api.dart';
@@ -21,7 +26,6 @@ import '../../../../util/message.dart';
 import '../../../../util/util.dart';
 import '../../../views/icon_button_loading.dart';
 import '../../../views/responsive_builder.dart';
-import '../../../views/text_button_loading.dart';
 import '../controllers/extension_controller.dart';
 
 class ExtensionView extends GetView<ExtensionController> {
@@ -32,44 +36,45 @@ class ExtensionView extends GetView<ExtensionController> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              TextButton.icon(
-                onPressed: () {
-                  launchUrl(Uri.parse(
-                      'https://github.com/search?q=topic%3Agopeed-extension&type=repositories'));
-                },
-                icon: const Icon(Icons.search),
-                label: Text('extensionFind'.tr),
-              ),
-              const SizedBox(width: 16),
-              TextButton.icon(
-                onPressed: () {
-                  launchUrl(
-                      Uri.parse('https://docs.gopeed.com/dev-extension.html'));
-                },
-                icon: const Icon(Icons.edit),
-                label: Text('extensionDevelop'.tr),
-              ),
-            ],
+    return BasePaneBody(
+      title: 'extensions'.tr,
+      titleActions: [
+        Tooltip(
+          message: 'extensionFind'.tr,
+          child: IconButton(
+            icon: const Icon(FluentIcons.apps_add_in_24_regular, size: 24.0),
+            onPressed: () {
+              launchUrl(Uri.parse('https://github.com/search?q=topic%3Agopeed-extension&type=repositories'));
+            },
           ),
-          Obx(() => Row(
+        ),
+        const SizedBox(width: 16),
+        Tooltip(
+          message: 'extensionDevelop'.tr,
+          child: IconButton(
+            icon: const Icon(FluentIcons.window_dev_tools_24_regular, size: 24.0),
+            onPressed: () => launchUrl(Uri.parse('https://docs.gopeed.com/dev-extension.html')),
+          ),
+        ),
+      ],
+      body: Column(
+        children: [
+          const SizedBox(height: 16),
+          UniversalPaneChild(
+            child: Obx(
+              () => Row(
+                spacing: 12,
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _installUrlController,
-                      decoration: InputDecoration(
-                        labelText: 'extensionInstallUrl'.tr,
-                      ),
+                    child: InfoLabel(
+                      label: 'extensionInstallUrl'.tr,
+                      child: TextBox(placeholder: 'url'.tr, controller: _installUrlController),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  IconButtonLoading(
+                  Tooltip(
+                    message: 'install'.tr,
+                    child: IconButtonLoading(
                       controller: _installBtnController,
                       onPressed: () async {
                         if (_installUrlController.text.isEmpty) {
@@ -78,432 +83,467 @@ class ExtensionView extends GetView<ExtensionController> {
                         }
                         _installBtnController.start();
                         try {
-                          await installExtension(InstallExtension(
-                              url: _installUrlController.text));
-                          Get.snackbar('tip'.tr, 'extensionInstallSuccess'.tr);
+                          await installExtension(InstallExtension(url: _installUrlController.text));
+                          if (context.mounted) showMessage(context, 'tip'.tr, 'extensionInstallSuccess'.tr);
                           await controller.load();
                         } catch (e) {
-                          showErrorMessage(e);
+                          if (context.mounted) showErrorMessage(context, e);
                         } finally {
                           _installBtnController.stop();
                         }
                       },
-                      icon: const Icon(Icons.download)),
+                      icon: const Icon(FluentIcons.arrow_download_20_regular, size: 20.0),
+                    ),
+                  ),
                   controller.devMode.value && Util.isDesktop()
-                      ? IconButton(
-                          icon: const Icon(Icons.folder_open),
-                          onPressed: () async {
-                            var dir =
-                                await FilePicker.platform.getDirectoryPath();
-                            if (dir != null) {
-                              try {
-                                await installExtension(
-                                    InstallExtension(devMode: true, url: dir));
-                                Get.snackbar(
-                                    'tip'.tr, 'extensionInstallSuccess'.tr);
-                                await controller.load();
-                              } catch (e) {
-                                showErrorMessage(e);
+                      ? Tooltip(
+                          message: 'installFromFolder'.tr,
+                          child: IconButton(
+                            icon: const Icon(FluentIcons.folder_add_20_regular, size: 20.0),
+                            onPressed: () async {
+                              var dir = await FilePicker.platform.getDirectoryPath();
+                              if (dir != null) {
+                                try {
+                                  await installExtension(InstallExtension(devMode: true, url: dir));
+                                  if (context.mounted) showMessage(context, 'tip'.tr, 'extensionInstallSuccess'.tr);
+                                  await controller.load();
+                                } catch (e) {
+                                  if (context.mounted) showErrorMessage(context, e);
+                                }
                               }
-                            }
-                          })
-                      : Container()
+                            },
+                          ),
+                        )
+                      : Container(),
                 ],
-              )),
+              ),
+            ),
+          ),
           const SizedBox(height: 16),
           Expanded(
-              child: Obx(() => ListView.builder(
-                    itemCount: controller.extensions.length,
-                    itemBuilder: (context, index) {
-                      final extension = controller.extensions[index];
-                      return SizedBox(
-                        height: ResponsiveBuilder.isNarrow(context) ? 152 : 112,
-                        child: Card(
-                          elevation: 4.0,
-                          child: Column(
-                            children: [
-                              Expanded(
-                                child: ListTile(
-                                  leading: extension.icon.isEmpty
-                                      ? Image.asset(
-                                          "assets/extension/default_icon.png",
-                                          width: 48,
-                                          height: 48,
-                                        )
-                                      : Util.isWeb()
-                                          ? Image.network(
-                                              join(
-                                                  '/fs/extensions/${extension.identity}/${extension.icon}'),
-                                              width: 48,
-                                              height: 48,
-                                              headers: {
-                                                'Authorization':
-                                                    'Bearer ${Database.instance.getWebToken()}'
-                                              },
-                                            )
-                                          : Image.file(
-                                              extension.devMode
-                                                  ? File(path.join(
-                                                      extension.devPath,
-                                                      extension.icon))
-                                                  : File(path.join(
-                                                      Util.getStorageDir(),
-                                                      "extensions",
-                                                      extension.identity,
-                                                      extension.icon)),
-                                              width: 48,
-                                              height: 48,
-                                            ),
-                                  trailing: Switch(
-                                    value: !extension.disabled,
-                                    onChanged: (value) async {
-                                      try {
-                                        await switchExtension(
-                                            extension.identity,
-                                            SwitchExtension(status: value));
-                                        await controller.load();
-                                      } catch (e) {
-                                        showErrorMessage(e);
-                                      }
-                                    },
-                                  ),
-                                  title: Row(
-                                    children: () {
-                                      final list = [
-                                        ResponsiveBuilder.isNarrow(context)
-                                            ? Expanded(
-                                                child: Text(
-                                                  extension.title,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              )
-                                            : Text(extension.title),
-                                        const SizedBox(width: 8),
-                                        buildChip('v${extension.version}'),
-                                      ];
-                                      if (extension.devMode) {
-                                        list.add(const SizedBox(width: 8));
-                                        list.add(buildChip(
-                                          'dev',
-                                          bgColor: Colors.blue.shade300,
-                                        ));
-                                      }
-                                      return list;
-                                    }(),
-                                  ),
-                                  subtitle: ResponsiveBuilder.isNarrow(context)
-                                      ? Text(
-                                          extension.description,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        )
-                                      : Text(extension.description),
-                                ),
-                              ),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  extension.homepage.isNotEmpty == true
-                                      ? IconButton(
-                                          onPressed: () {
-                                            launchUrl(
-                                                Uri.parse(extension.homepage));
-                                          },
-                                          icon: const Icon(Icons.home))
-                                      : null,
-                                  extension.repository?.url.isNotEmpty == true
-                                      ? IconButton(
-                                          onPressed: () {
-                                            launchUrl(Uri.parse(
-                                                extension.repository!.url));
-                                          },
-                                          icon: const Icon(Icons.code))
-                                      : null,
-                                  extension.settings?.isNotEmpty == true
-                                      ? IconButton(
-                                          onPressed: () {
-                                            _showSettingDialog(extension);
-                                          },
-                                          icon: const Icon(Icons.settings))
-                                      : null,
-                                  IconButton(
-                                      onPressed: () {
-                                        _showDeleteDialog(extension);
-                                      },
-                                      icon: const Icon(Icons.delete)),
-                                  Obx(() => controller.updateFlags
-                                          .containsKey(extension.identity)
-                                      ? badges.Badge(
-                                          position:
-                                              badges.BadgePosition.topStart(
-                                                  start: 36),
-                                          child: IconButton(
-                                              onPressed: () {
-                                                _showUpdateDialog(extension);
-                                              },
-                                              icon: const Icon(Icons.refresh)))
-                                      : IconButton(
-                                          onPressed: () {
-                                            showMessage('tip'.tr,
-                                                'extensionAlreadyLatest'.tr);
-                                          },
-                                          icon: const Icon(Icons.refresh))),
-                                ]
-                                    .where((e) => e != null)
-                                    .map((e) => e!)
-                                    .toList(),
-                              ).paddingOnly(right: 16)
-                            ],
-                          ),
-                        ),
-                      ).paddingOnly(top: 8);
-                    },
-                  ))),
+            child: Obx(
+              () => ListView.builder(
+                physics: const BouncingScrollPhysics(),
+                itemCount: controller.extensions.length,
+                itemBuilder: (context, index) {
+                  final extension = controller.extensions[index];
+                  return UniversalPaneChild(child: _ExtensionItem(key: Key('extension-$index'), extension, controller));
+                },
+              ),
+            ),
+          ),
         ],
-      ).paddingAll(32),
+      ),
     );
   }
+}
 
-  Widget buildChip(String text, {Color? bgColor}) {
-    return Chip(
-      padding: const EdgeInsets.all(0),
-      backgroundColor: bgColor,
-      label: Text(text, style: const TextStyle(fontSize: 12)),
-    );
-  }
+///普通扩展项
+class _ExtensionItem extends StatelessWidget {
+  _ExtensionItem(this.extension, this.controller, {super.key});
 
-  Future<void> _showSettingDialog(Extension extension) async {
-    final formKey = GlobalKey<FormBuilderState>();
-    final confrimController = RoundedLoadingButtonController();
+  final Extension extension;
+  final ExtensionController controller;
 
-    return showDialog<void>(
-        context: Get.context!,
-        barrierDismissible: false,
-        builder: (_) => AlertDialog(
-              content: Builder(builder: (context) {
-                final height = MediaQuery.of(context).size.height;
-                final width = MediaQuery.of(context).size.width;
+  final menuController = FlyoutController();
 
-                return SizedBox(
-                  height: height * 0.75,
-                  width: width,
-                  child: FormBuilder(
-                    key: formKey,
-                    // autovalidateMode: AutovalidateMode.always,
-                    child: Column(children: [
-                      Text('setting'.tr),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          child: Column(
-                              children: extension.settings!.map((e) {
-                            final settingItem = _buildSettingItem(e);
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    final subTitleStyle = theme.typography.caption;
+    return UniversalListItem(
+      backgroundColor: getCardBackgroundColor(FluentTheme.of(context)),
+      leading: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 16, 12, 16),
+        child: SizedBox(
+          width: 48.0,
+          height: 48.0,
+          child: extension.icon.isEmpty
+              ? Image.asset("assets/extension/default_icon.png", fit: BoxFit.cover)
+              : Util.isWeb()
+              ? Image.network(
+                  join('/fs/extensions/${extension.identity}/${extension.icon}'),
+                  fit: BoxFit.cover,
+                  headers: {'Authorization': 'Bearer ${Database.instance.getWebToken()}'},
+                )
+              : Image.file(
+                  extension.devMode
+                      ? File(path.join(extension.devPath, extension.icon))
+                      : File(path.join(Util.getStorageDir(), "extensions", extension.identity, extension.icon)),
+                  fit: BoxFit.cover,
+                ),
+        ),
+      ),
+      title: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 16, 12, 16),
+        child: Column(
+          spacing: 4,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(text: extension.title, style: theme.typography.body),
+                  WidgetSpan(child: buildChip('v${extension.version}')),
+                  if (extension.devMode) WidgetSpan(child: buildChip('dev', dev: true)),
+                ],
+              ),
+            ),
+            ResponsiveBuilder.isNarrow(context)
+                ? Text(extension.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: subTitleStyle)
+                : Text(extension.description, style: subTitleStyle),
+          ],
+        ),
+      ),
+      trailing: Row(
+        spacing: 12.0,
+        children: [
+          ToggleSwitch(
+            checked: !extension.disabled,
+            leadingContent: true,
+            content: Text(extension.disabled ? 'disable'.tr : 'enable'.tr),
+            onChanged: (value) async {
+              try {
+                await switchExtension(extension.identity, SwitchExtension(status: value));
+                await controller.load();
+              } catch (e) {
+                if (context.mounted) showErrorMessage(context, e);
+              }
+            },
+          ),
+          Obx(() {
+            final haveExtUpdate = controller.updateFlags.containsKey(extension.identity);
 
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                SizedBox(
-                                        width: 20,
-                                        child: e.description.isEmpty
-                                            ? null
-                                            : Tooltip(
-                                                message: e.description,
-                                                child: const CircleAvatar(
-                                                    radius: 10,
-                                                    backgroundColor:
-                                                        Colors.grey,
-                                                    child: Icon(
-                                                      Icons.question_mark,
-                                                      size: 10,
-                                                    )),
-                                              ))
-                                    .paddingOnly(right: 10),
-                                Expanded(child: settingItem),
-                              ],
-                            );
-                          }).toList()),
+            final moreIconButton = IconButton(
+              icon: const Icon(FluentIcons.more_horizontal_24_regular, size: 24.0),
+              onPressed: () {
+                menuController.showFlyout(
+                  autoModeConfiguration: FlyoutAutoConfiguration(preferredMode: FlyoutPlacementMode.bottomCenter),
+                  barrierDismissible: true,
+                  dismissOnPointerMoveAway: false,
+                  dismissWithEsc: true,
+                  navigatorKey: Get.key.currentState,
+                  builder: (ctx) {
+                    return MenuFlyout(
+                      items: [
+                        MenuFlyoutItem(
+                          leading: haveExtUpdate
+                              ? badges.Badge(
+                                  position: badges.BadgePosition.topEnd(),
+                                  child: const Icon(FluentIcons.arrow_sync_16_regular, size: 16.0),
+                                )
+                              : const Icon(FluentIcons.arrow_sync_16_regular, size: 16.0),
+                          text: Text('update'.tr),
+                          onPressed: () {
+                            if (haveExtUpdate) {
+                              _showUpdateDialog(extension).then((_) {
+                                if (ctx.mounted) Flyout.of(ctx).close();
+                              });
+                            } else {
+                              showMessage(context, 'tip'.tr, 'extensionAlreadyLatest'.tr);
+                            }
+                          },
                         ),
-                      ),
-                    ]),
-                  ),
+                        const MenuFlyoutSeparator(),
+                        if (extension.homepage.isNotEmpty == true)
+                          MenuFlyoutItem(
+                            leading: const Icon(FluentIcons.home_16_regular, size: 16.0),
+                            text: Text('homepage'.tr),
+                            onPressed: () => launchUrl(Uri.parse(extension.homepage)),
+                          ),
+                        if (extension.repository?.url.isNotEmpty == true)
+                          MenuFlyoutItem(
+                            leading: const Icon(FluentIcons.code_16_regular, size: 16.0),
+                            text: Text('repository'.tr),
+                            onPressed: () => launchUrl(Uri.parse(extension.repository!.url)),
+                          ),
+                        if (extension.homepage.isNotEmpty == true || extension.repository?.url.isNotEmpty == true)
+                          const MenuFlyoutSeparator(),
+                        MenuFlyoutItem(
+                          leading: const Icon(FluentIcons.delete_16_regular, size: 16.0),
+                          text: Text('delete'.tr),
+                          onPressed: () {
+                            _showDeleteDialog(context, extension).then((_) {
+                              if (ctx.mounted) Flyout.of(ctx).close();
+                            });
+                          },
+                        ),
+                        if (extension.settings?.isNotEmpty == true)
+                          MenuFlyoutItem(
+                            leading: const Icon(FluentIcons.settings_16_regular, size: 16.0),
+                            text: Text('setting'.tr),
+                            onPressed: () {
+                              _showSettingDialog(context, extension).then((_) {
+                                if (ctx.mounted) Flyout.of(ctx).close();
+                              });
+                            },
+                          ),
+                      ],
+                    );
+                  },
                 );
-              }),
-              actions: [
-                ConstrainedBox(
-                  constraints: BoxConstraints.tightFor(
-                    width: Get.theme.buttonTheme.minWidth,
-                    height: Get.theme.buttonTheme.height,
-                  ),
-                  child: ElevatedButton(
-                    style:
-                        ElevatedButton.styleFrom(shape: const StadiumBorder())
-                            .copyWith(
-                                backgroundColor: MaterialStateProperty.all(
-                                    Get.theme.colorScheme.background)),
-                    onPressed: () {
-                      Get.back();
-                    },
-                    child: Text('cancel'.tr),
-                  ),
-                ),
-                ConstrainedBox(
-                  constraints: BoxConstraints.tightFor(
-                    width: Get.theme.buttonTheme.minWidth,
-                    height: Get.theme.buttonTheme.height,
-                  ),
-                  child: RoundedLoadingButton(
-                      color: Get.theme.colorScheme.secondary,
-                      onPressed: () async {
-                        try {
-                          confrimController.start();
-                          if (formKey.currentState?.saveAndValidate() == true) {
-                            await updateExtensionSettings(
-                                extension.identity,
-                                UpdateExtensionSettings(
-                                    settings: formKey.currentState!.value));
-                            await controller.load();
-                            Get.back();
-                          }
-                        } catch (e) {
-                          showErrorMessage(e);
-                        } finally {
-                          confrimController.reset();
-                        }
-                      },
-                      controller: confrimController,
-                      child: Text(
-                        'confirm'.tr,
-                      )),
-                ),
-              ],
-            ));
+              },
+            );
+
+            return FlyoutTarget(
+              controller: menuController,
+              child: haveExtUpdate
+                  ? badges.Badge(position: badges.BadgePosition.topEnd(top: 1, end: 1), child: moreIconButton)
+                  : moreIconButton,
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget buildChip(String text, {bool dev = false}) {
+    return Builder(
+      builder: (context) {
+        final theme = FluentTheme.of(context);
+        final textColor = dev ? theme.accentColor : null;
+        final bgColor = dev ? theme.accentColor.withValues(alpha: 0.2) : theme.resources.subtleFillColorSecondary;
+        return Container(
+          margin: const EdgeInsets.only(left: 8),
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), color: bgColor),
+          child: Text(text, style: TextStyle(fontSize: 12, color: textColor)),
+        );
+      },
+    );
   }
 
   Widget _buildSettingItem(Setting setting) {
-    final requiredValidator =
-        setting.required ? FormBuilderValidators.required() : null;
+    final requiredValidator = setting.required ? FormBuilderValidators.required() : null;
 
-    Widget buildTextField(TextInputFormatter? inputFormatter,
-        FormFieldValidator<String>? validator, TextInputType? keyBoardType) {
-      return FormBuilderTextField(
-        name: setting.name,
-        decoration: InputDecoration(labelText: setting.title),
-        initialValue: setting.value?.toString(),
-        inputFormatters: inputFormatter != null ? [inputFormatter] : null,
-        keyboardType: keyBoardType,
-        validator: FormBuilderValidators.compose([
-          requiredValidator,
-          validator,
-        ].where((e) => e != null).map((e) => e!).toList()),
+    final tipWidget = setting.description.isNotEmpty
+        ? Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: Tooltip(
+              message: setting.description,
+              child: IconButton(icon: const Icon(FluentIcons.info_24_regular, size: 20), onPressed: () {}),
+            ),
+          )
+        : null;
+
+    Widget buildTextField(
+      TextInputFormatter? inputFormatter,
+      FormFieldValidator<String>? validator,
+      TextInputType? keyBoardType,
+    ) {
+      final validate = FormBuilderValidators.compose(
+        [requiredValidator, validator].where((e) => e != null).map((e) => e!).toList(),
+      );
+      return InfoLabel(
+        label: setting.title,
+        child: FormBuilderField<String>(
+          name: setting.name,
+          validator: validate,
+          initialValue: setting.value?.toString(),
+          builder: (field) {
+            return Row(
+              children: [
+                Expanded(
+                  child: TextFormBox(
+                    initialValue: field.value,
+                    inputFormatters: inputFormatter != null ? [inputFormatter] : null,
+                    keyboardType: keyBoardType,
+                    validator: validate,
+                    onChanged: (value) => field.didChange(value),
+                  ),
+                ),
+                ?tipWidget,
+              ],
+            );
+          },
+        ),
       );
     }
 
     Widget buildDropdown() {
-      return FormBuilderDropdown<String>(
-        name: setting.name,
-        decoration: InputDecoration(
-          labelText: setting.title,
+      final validator = FormBuilderValidators.compose(
+        [requiredValidator].where((e) => e != null).map((e) => e!).toList(),
+      );
+      return InfoLabel(
+        label: setting.title,
+        child: FormBuilderField<String>(
+          name: setting.name,
+          validator: validator,
+          initialValue: setting.value?.toString(),
+          builder: (field) {
+            return Row(
+              children: [
+                Flexible(
+                  child: Focus(
+                    canRequestFocus: false,
+                    skipTraversal: true,
+                    child: FormRow(
+                      padding: EdgeInsets.zero,
+                      error: field.errorText != null ? Text(field.errorText!) : null,
+                      child: ComboBox<String>(
+                        value: field.value,
+                        items: setting.options!
+                            .map((e) => ComboBoxItem(value: e.value.toString(), child: Text(e.label)))
+                            .toList(),
+                        onChanged: (String? value) => field.didChange(value),
+                      ),
+                    ),
+                  ),
+                ),
+                ?tipWidget,
+              ],
+            );
+          },
         ),
-        initialValue: setting.value?.toString(),
-        validator: FormBuilderValidators.compose([
-          requiredValidator,
-        ].where((e) => e != null).map((e) => e!).toList()),
-        items: setting.options!
-            .map((e) => DropdownMenuItem(
-                  value: e.value.toString(),
-                  child: Text(e.label),
-                ))
-            .toList(),
+      );
+    }
+
+    Widget buildToggleSwitch() {
+      final bool initValue = ((setting.value is bool) ? setting.value as bool : false);
+      return FormBuilderField<bool>(
+        name: setting.name,
+        validator: requiredValidator,
+        initialValue: initValue,
+        builder: (field) {
+          return Row(
+            children: [
+              Flexible(
+                child: Focus(
+                  canRequestFocus: false,
+                  skipTraversal: true,
+                  child: FormRow(
+                    padding: EdgeInsets.zero,
+                    error: field.errorText != null ? Text(field.errorText!) : null,
+                    child: ToggleSwitch(
+                      checked: (field.value ?? false),
+                      content: Text(setting.title),
+                      onChanged: (value) => field.didChange(value),
+                    ),
+                  ),
+                ),
+              ),
+              ?tipWidget,
+            ],
+          );
+        },
       );
     }
 
     switch (setting.type) {
       case SettingType.string:
-        return setting.options?.isNotEmpty == true
-            ? buildDropdown()
-            : buildTextField(null, null, null);
+        return setting.options?.isNotEmpty == true ? buildDropdown() : buildTextField(null, null, null);
       case SettingType.number:
         return setting.options?.isNotEmpty == true
             ? buildDropdown()
             : buildTextField(
                 FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d*')),
                 FormBuilderValidators.numeric(),
-                const TextInputType.numberWithOptions(decimal: true));
+                const TextInputType.numberWithOptions(decimal: true),
+              );
       case SettingType.boolean:
-        return FormBuilderSwitch(
-          name: setting.name,
-          initialValue: (setting.value as bool?) ?? false,
-          title: Text(setting.title),
-          validator: requiredValidator,
-        );
+        return buildToggleSwitch();
     }
   }
 
-  void _showDeleteDialog(Extension extension) {
-    showDialog(
-        context: Get.context!,
-        barrierDismissible: false,
-        builder: (_) => AlertDialog(
-              title: Text('extensionDelete'.tr),
-              actions: [
-                TextButton(
-                  child: Text('cancel'.tr),
-                  onPressed: () => Get.back(),
-                ),
-                TextButton(
-                  child: Text(
-                    'confirm'.tr,
-                    style: const TextStyle(color: Colors.redAccent),
-                  ),
-                  onPressed: () async {
-                    try {
-                      await deleteExtension(extension.identity);
-                      await controller.load();
-                      Get.back();
-                    } catch (e) {
-                      showErrorMessage(e);
-                    }
-                  },
-                ),
-              ],
-            ));
+  Future<void> _showUpdateDialog(Extension extension) {
+    final confrimController = FilledButtonLoadingController();
+    return showDialog<void>(
+      context: Get.context!,
+      builder: (context) => ContentDialog(
+        content: Text('newVersionTitle'.trParams({'version': 'v${controller.updateFlags[extension.identity]!}'})),
+        actions: [
+          FilledButtonLoading(
+            controller: confrimController,
+            onPressed: () async {
+              confrimController.start();
+              try {
+                await updateExtension(extension.identity);
+                await controller.load();
+                controller.updateFlags.remove(extension.identity);
+                Get.back();
+                if (context.mounted) showMessage(context, 'tip'.tr, 'extensionUpdateSuccess'.tr);
+              } catch (e) {
+                if (context.mounted) showErrorMessage(context, e);
+              } finally {
+                confrimController.stop();
+              }
+            },
+            child: Text('newVersionUpdate'.tr),
+          ),
+          Button(onPressed: () => Get.back(), child: Text('newVersionLater'.tr)),
+        ],
+      ),
+    );
   }
 
-  void _showUpdateDialog(Extension extension) {
-    final confrimController = TextButtonLoadingController();
+  Future<void> _showDeleteDialog(BuildContext context, Extension extension) {
+    return showDialog<void>(
+      context: Get.context!,
+      barrierDismissible: false,
+      builder: (_) => ContentDialog(
+        title: Text('extensionDelete'.tr),
+        actions: [
+          FilledButton(
+            child: Text('confirm'.tr),
+            onPressed: () async {
+              try {
+                await deleteExtension(extension.identity);
+                await controller.load();
+                Get.back();
+              } catch (e) {
+                if (context.mounted) showErrorMessage(context, e);
+              }
+            },
+          ),
+          Button(child: Text('cancel'.tr), onPressed: () => Get.back()),
+        ],
+      ),
+    );
+  }
 
-    showDialog(
-        context: Get.context!,
-        builder: (context) => AlertDialog(
-              content: Text('newVersionTitle'.trParams({
-                'version': 'v${controller.updateFlags[extension.identity]!}'
-              })),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Get.back();
-                  },
-                  child: Text('newVersionLater'.tr),
-                ),
-                TextButtonLoading(
-                  controller: confrimController,
-                  onPressed: () async {
-                    confrimController.start();
-                    try {
-                      await updateExtension(extension.identity);
-                      await controller.load();
-                      controller.updateFlags.remove(extension.identity);
-                      Get.back();
-                      showMessage('tip'.tr, 'extensionUpdateSuccess'.tr);
-                    } catch (e) {
-                      showErrorMessage(e);
-                    } finally {
-                      confrimController.stop();
-                    }
-                  },
-                  child: Text('newVersionUpdate'.tr),
-                ),
-              ],
-            ));
+  Future<void> _showSettingDialog(BuildContext context, Extension extension) async {
+    final formKey = GlobalKey<FormBuilderState>();
+    final confrimController = FilledButtonLoadingController();
+
+    return showDialog<void>(
+      context: Get.context!,
+      barrierDismissible: false,
+      builder: (_) => ContentDialog(
+        title: Text('setting'.tr),
+        content: FormBuilder(
+          key: formKey,
+          // autovalidateMode: AutovalidateMode.always,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Column(spacing: 16, children: extension.settings!.map((e) => _buildSettingItem(e)).toList()),
+          ),
+        ),
+
+        actions: [
+          FilledButtonLoading(
+            onPressed: () async {
+              try {
+                confrimController.start();
+                if (formKey.currentState?.saveAndValidate() == true) {
+                  await updateExtensionSettings(
+                    extension.identity,
+                    UpdateExtensionSettings(settings: formKey.currentState!.value),
+                  );
+                  await controller.load();
+                  Get.back();
+                }
+              } catch (e) {
+                if (context.mounted) showErrorMessage(context, e);
+              } finally {
+                confrimController.stop();
+              }
+            },
+            controller: confrimController,
+            child: Text('confirm'.tr),
+          ),
+          Button(onPressed: () => Get.back(), child: Text('cancel'.tr)),
+        ],
+      ),
+    );
   }
 }

@@ -30,3 +30,5 @@ cmd/web/dist/
 .test_storage/
 .test_download/
 /extensions
+ui/GopeedMsixPack/
+ui/InstallerPack

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:get/get.dart';
 
 class CheckListView extends StatefulWidget {
@@ -26,46 +26,40 @@ class _CheckListView extends State<CheckListView> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-        margin: const EdgeInsets.only(top: 10),
-        decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey, width: 1),
-            borderRadius: BorderRadius.circular(5)),
-        child: Column(
-          children: [
-            CheckboxListTile(
-              value: _allChecked,
-              onChanged: (value) {
-                setState(() {
-                  _checked.clear();
-                  if (value!) {
-                    _checked.addAll(_items);
-                  }
-                  widget.onChanged(_checked);
-                });
-              },
-              title: Text('selectAll'.tr),
-            ),
-            Expanded(
-              child: ListView.builder(
-                  itemCount: _items.length,
-                  itemBuilder: (context, index) {
-                    var item = _items[index];
-                    return CheckboxListTile(
-                      value: _checked.contains(item),
-                      onChanged: (value) {
-                        setState(() {
-                          _checked.contains(item)
-                              ? _checked.remove(item)
-                              : _checked.add(item);
-                          widget.onChanged(_checked);
-                        });
-                      },
-                      title: Text(item),
-                    );
-                  }),
-            ),
-          ],
-        ));
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.builder(
+            itemCount: _items.length,
+            itemBuilder: (context, index) {
+              final item = _items[index];
+              return ListTile.selectable(
+                selectionMode: ListTileSelectionMode.multiple,
+                selected: _checked.contains(item),
+                onSelectionChange: (value) {
+                  setState(() {
+                    _checked.contains(item) ? _checked.remove(item) : _checked.add(item);
+                    widget.onChanged(_checked);
+                  });
+                },
+                title: Text(item),
+              );
+            },
+          ),
+        ),
+        ListTile.selectable(
+          selectionMode: ListTileSelectionMode.multiple,
+          selected: _allChecked,
+          onSelectionChange: (value) {
+            setState(() {
+              _checked.clear();
+              if (value) _checked.addAll(_items);
+              widget.onChanged(_checked);
+            });
+          },
+          title: Text('selectAll'.tr),
+        ),
+      ],
+    );
   }
 }
