@@ -1,60 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
-import 'package:dio/dio.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:get/get.dart';
-import 'package:install_plugin/install_plugin.dart';
-import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api/api.dart';
-import '../app/views/outlined_button_loading.dart';
-import 'arch/arch.dart';
-import 'github_mirror.dart';
 import 'log_util.dart';
-import 'message.dart';
 import 'package_info.dart';
-import 'util.dart';
 
-enum Channel {
-  windowsInstaller,
-  windowsPortable,
-  macosDmg,
-  linuxFlathub,
-  linuxSnap,
-  linuxDeb,
-  linuxAppImage,
-  androidApk,
-  iosIpa,
-  docker,
-}
-
-const _channelEnv = String.fromEnvironment("UPDATE_CHANNEL");
-final _channel =
-    Channel.values.where((e) => e.name == _channelEnv).firstOrNull ??
-        () {
-          if (Util.isWindows()) {
-            return Channel.windowsPortable;
-          } else if (Util.isMacos()) {
-            return Channel.macosDmg;
-          } else if (Util.isAndroid()) {
-            return Channel.androidApk;
-          } else if (Util.isIOS()) {
-            return Channel.iosIpa;
-          } else {
-            return null;
-          }
-        }();
-final _updaterBin = "updater${Util.isWindows() ? ".exe" : ""}";
-
-Future<void> installUpdater() async {
-  await Util.installAsset(
-      'assets/exec/$_updaterBin', Util.homePathJoin(_updaterBin),
-      executable: true);
-}
+const modRespository = 'https://github.com/Minessential/gopeed-fluent';
 
 class VersionInfo {
   final String version;
@@ -67,11 +22,11 @@ Future<VersionInfo?> checkUpdate() async {
   String? releaseDataStr;
   try {
     releaseDataStr = (await proxyRequest(
-            "https://api.github.com/repos/GopeedLab/gopeed/releases/latest"))
-        .data;
+      "https://api.github.com/repos/Minessential/gopeed-fluent/releases/latest",
+    )).data;
   } catch (e) {
-    releaseDataStr =
-        (await proxyRequest("https://gopeed.com/api/release")).data;
+    logger.e("Failed to fetch latest release data", e);
+    return null;
   }
   if (releaseDataStr == null) {
     return null;
@@ -104,8 +59,7 @@ Future<VersionInfo?> checkUpdate() async {
   return VersionInfo(latestVersion, releaseData["body"]);
 }
 
-Future<void> showUpdateDialog(
-    BuildContext context, VersionInfo versionInfo) async {
+Future<void> showUpdateDialog(BuildContext context, VersionInfo versionInfo) async {
   final fullChangeLog = versionInfo.changeLog;
   final isZh = Get.locale?.languageCode == "zh";
   final changeLogRegex = isZh
@@ -113,150 +67,51 @@ Future<void> showUpdateDialog(
       : RegExp(r"(# Release notes.*)#\s+更新日志", multiLine: true, dotAll: true);
   final changeLog = changeLogRegex.firstMatch(fullChangeLog)?.group(1) ?? "";
   await showDialog(
-    context: Get.context!,
+    context: context,
     barrierDismissible: false,
     builder: (context) {
-      bool isDownloading = false;
-      double progress = 0;
-      int total = 0;
-      final buttonController = OutlinedButtonLoadingController();
-      return StatefulBuilder(
-        builder: (context, setState) {
-          final screenSize = MediaQuery.of(context).size;
-          final dialogWidth =
-              screenSize.width < 500 ? screenSize.width * 0.9 : 500.0;
-          final dialogHeight =
-              screenSize.height < 600 ? screenSize.height * 0.8 : 400.0;
-
-          return Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: SizedBox(
-              width: dialogWidth,
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'newVersionTitle'
-                          .trParams({'version': versionInfo.version}),
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      height: dialogHeight * 0.5,
-                      decoration: BoxDecoration(
-                        border:
-                            Border.all(color: Theme.of(context).dividerColor),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: ScrollConfiguration(
-                        behavior: ScrollConfiguration.of(context).copyWith(
-                          scrollbars: true,
-                        ),
-                        child: Builder(
-                          builder: (context) {
-                            final controller = ScrollController();
-                            return Scrollbar(
-                              controller: controller,
-                              thumbVisibility: true,
-                              child: SingleChildScrollView(
-                                controller: controller,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children:
-                                        _parseMarkdown(changeLog, context),
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    if (isDownloading) ...[
-                      const SizedBox(height: 16),
-                      LinearProgressIndicator(
-                        value: progress,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            '${(progress * 100).toStringAsFixed(1)}%',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          Text(
-                            total == 0
-                                ? ''
-                                : '${Util.fmtByte((total * progress).toInt())} / ${Util.fmtByte(total)}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ],
-                      )
-                    ],
-                    const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: isDownloading ? null : () => Get.back(),
-                          child: Text(
-                            'newVersionLater'.tr,
-                            style: TextStyle(
-                                color: isDownloading
-                                    ? Theme.of(context).disabledColor
-                                    : Theme.of(context).colorScheme.error),
+      return ContentDialog(
+        title: Text('newVersionTitle'.trParams({'version': versionInfo.version})),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Flexible(
+              child: ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: true),
+                child: Builder(
+                  builder: (context) {
+                    final controller = ScrollController();
+                    return Scrollbar(
+                      controller: controller,
+                      thumbVisibility: true,
+                      child: SingleChildScrollView(
+                        controller: controller,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: _parseMarkdown(changeLog, context),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        OutlinedButtonLoading(
-                          controller: buttonController,
-                          onPressed: () async {
-                            setState(() {
-                              isDownloading = true;
-                            });
-                            buttonController.start();
-                            try {
-                              await _update(versionInfo.version,
-                                  (received, fileTotal) {
-                                setState(() {
-                                  total = fileTotal;
-                                  progress = received / fileTotal;
-                                });
-                              });
-                            } catch (e) {
-                              showErrorMessage(e);
-                            } finally {
-                              setState(() {
-                                isDownloading = false;
-                              });
-                              buttonController.stop();
-                            }
-                          },
-                          child: Text('newVersionUpdate'.tr),
-                        ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
-          );
-        },
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () {
+              launchUrl(Uri.parse('$modRespository/releases'), mode: LaunchMode.externalApplication);
+              Get.back();
+            },
+            child: Text('newVersionUpdate'.tr),
+          ),
+          Button(onPressed: () => Get.back(), child: Text('newVersionLater'.tr)),
+        ],
       );
     },
   );
@@ -270,47 +125,35 @@ List<Widget> _parseMarkdown(String markdown, BuildContext context) {
     if (line.trim().isEmpty) continue;
     if (line.startsWith('# ')) {
       // H1 header
-      widgets.add(Text(
-        line.substring(2),
-        style: const TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-        ),
-      ));
+      widgets.add(Text(line.substring(2), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)));
     } else if (line.startsWith('## ')) {
       // H2 header
-      widgets.add(Text(
-        line.substring(3),
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-        ),
-      ));
+      widgets.add(Text(line.substring(3), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)));
     } else if (line.trim().startsWith('- ')) {
       // List item
-      widgets.add(Padding(
-        padding: const EdgeInsets.only(left: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('• ', style: TextStyle(fontSize: 14)),
-            Expanded(
-              child: Text(
-                line.substring(line.indexOf('-') + 1).trim().replaceFirst(
-                    RegExp(r'@[^\s]*\s\(#\d+\)'),
-                    ''), // Remove contributor and pr number
-                style: const TextStyle(fontSize: 14),
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('• ', style: TextStyle(fontSize: 14)),
+              Expanded(
+                child: Text(
+                  line
+                      .substring(line.indexOf('-') + 1)
+                      .trim()
+                      .replaceFirst(RegExp(r'@[^\s]*\s\(#\d+\)'), ''), // Remove contributor and pr number
+                  style: const TextStyle(fontSize: 14),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ));
+      );
     } else {
       // Normal text
-      widgets.add(Text(
-        line,
-        style: const TextStyle(fontSize: 14),
-      ));
+      widgets.add(Text(line, style: const TextStyle(fontSize: 14)));
     }
 
     // Add spacing between elements
@@ -318,115 +161,4 @@ List<Widget> _parseMarkdown(String markdown, BuildContext context) {
   }
 
   return widgets;
-}
-
-Future<void> _update(String version, Function(int, int) onProgress) async {
-  var newVersionAssetPath = "";
-  final newVersionAssetName = _getAssetName(version);
-
-  // Need to download the asset
-  if (newVersionAssetName.isNotEmpty) {
-    final downloadUrl =
-        'https://github.com/GopeedLab/gopeed/releases/download/v$version/$newVersionAssetName';
-    newVersionAssetPath = await _getAssetPath(version);
-
-    if (downloadUrl.isNotEmpty) {
-      final fastDownloadUrl =
-          await githubAutoMirror(downloadUrl, MirrorType.githubRelease);
-      final downloadClient = Dio();
-      await downloadClient.download(fastDownloadUrl, newVersionAssetPath,
-          onReceiveProgress: onProgress);
-    }
-  }
-
-  switch (_channel) {
-    case Channel.windowsInstaller:
-    case Channel.windowsPortable:
-    case Channel.macosDmg:
-    case Channel.linuxFlathub:
-    case Channel.linuxSnap:
-    case Channel.linuxDeb:
-      final updaterPath = Util.homePathJoin(_updaterBin);
-      // Check the updater binary is exists
-      if (!await File(updaterPath).exists()) {
-        await launchUrl(
-            Uri.parse(
-                'https://github.com/GopeedLab/gopeed/releases/tag/v$version'),
-            mode: LaunchMode.externalApplication);
-        break;
-      }
-      /**
-       *Usage of updater command:
-          -pid int
-          PID of the process to update
-          -channel string
-          Update channel
-          -asset string
-          Path to the package asset
-          -log string
-          Log file path
-       */
-      await Process.run(updaterPath, [
-        "-pid",
-        pid.toString(),
-        "-channel",
-        _channel!.name,
-        "-asset",
-        newVersionAssetPath,
-        "-log",
-        path.join(logsDir(), "updater.log")
-      ]);
-      break;
-    case Channel.androidApk:
-      await InstallPlugin.installApk(newVersionAssetPath);
-      break;
-    default:
-      await launchUrl(
-          Uri.parse(
-              'https://github.com/GopeedLab/gopeed/releases/tag/v$version'),
-          mode: LaunchMode.externalApplication);
-      break;
-  }
-}
-
-String _getAssetName(String version) {
-  final arch = getArch();
-
-  String commonArchName() {
-    return switch (arch) {
-      Architecture.ia32 => "386",
-      Architecture.x64 => "amd64",
-      _ => arch.name
-    };
-  }
-
-  switch (_channel) {
-    case Channel.windowsInstaller:
-      return 'Gopeed-v$version-windows-${commonArchName()}.zip';
-    case Channel.windowsPortable:
-      return 'Gopeed-v$version-windows-${commonArchName()}-portable.zip';
-    case Channel.macosDmg:
-      return 'Gopeed-v$version-macos-${commonArchName()}.dmg';
-    case Channel.linuxDeb:
-      return 'Gopeed-v$version-linux-${commonArchName()}.deb';
-    case Channel.androidApk:
-      final apkArchName = switch (arch) {
-        Architecture.arm => "armeabi-v7a",
-        Architecture.arm64 => "arm64-v8a",
-        Architecture.x64 => "x86_64",
-        _ => null
-      };
-      var apkNamePrefix = "Gopeed-v$version-android";
-      if (apkArchName != null) {
-        apkNamePrefix += "-$apkArchName";
-      }
-      return "$apkNamePrefix.apk";
-    default:
-      return "";
-  }
-}
-
-Future<String> _getAssetPath(String version) async {
-  return path.join(
-      (await getTemporaryDirectory()).path, _getAssetName(version));
 }

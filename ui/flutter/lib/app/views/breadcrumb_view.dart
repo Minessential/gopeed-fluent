@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 
 class Breadcrumb extends StatelessWidget {
@@ -12,8 +12,7 @@ class Breadcrumb extends StatelessWidget {
     required this.items,
     this.onItemTap,
     this.textStyle = const TextStyle(fontSize: 16),
-    this.activeTextStyle =
-        const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+    this.activeTextStyle = const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
   });
 
   @override
@@ -27,10 +26,7 @@ class Breadcrumb extends StatelessWidget {
               onItemTap!(i);
             }
           },
-          child: Text(
-            items[i],
-            style: i == items.length - 1 ? activeTextStyle : textStyle,
-          ),
+          child: Text(items[i], style: i == items.length - 1 ? activeTextStyle : textStyle),
         ),
       );
       if (i != items.length - 1) {
@@ -39,17 +35,13 @@ class Breadcrumb extends StatelessWidget {
     }
     return Row(
       children: [
-        ...(children.length == 1
-            ? children.sublist(0, 1)
-            : children.sublist(0, 2)),
+        ...(children.length == 1 ? children.sublist(0, 1) : children.sublist(0, 2)),
         children.length > 2
             ? Expanded(
                 child: SingleChildScrollView(
                   reverse: true,
                   scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: children.sublist(2),
-                  ),
+                  child: Row(children: children.sublist(2)),
                 ),
               )
             : null,

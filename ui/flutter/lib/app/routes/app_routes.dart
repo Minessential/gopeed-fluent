@@ -6,8 +6,9 @@ abstract class Routes {
 
   static const ROOT = _Paths.ROOT;
   static const HOME = _Paths.HOME;
-  static const CREATE = _Paths.CREATE;
+  static const CREATE = _Paths.HOME + _Paths.CREATE;
   static const TASK = _Paths.HOME + _Paths.TASK;
+  static const TASK_DONE = _Paths.HOME + _Paths.TASK_DONE;
   static const TASK_FILES = TASK + _Paths.TASK_FILES;
   static const EXTENSION = _Paths.HOME + _Paths.EXTENSION;
   static const SETTING = _Paths.HOME + _Paths.SETTING;
@@ -21,6 +22,7 @@ abstract class _Paths {
   static const HOME = '/home';
   static const CREATE = '/create';
   static const TASK = '/task';
+  static const TASK_DONE = '/task-done';
   static const TASK_FILES = '/files';
   static const EXTENSION = '/extension';
   static const SETTING = '/setting';

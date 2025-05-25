@@ -1,3 +1,4 @@
+import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 import 'meta.dart';
@@ -9,18 +10,19 @@ enum Status { ready, running, pause, wait, error, done }
 enum Protocol { http, bt }
 
 @JsonSerializable(explicitToJson: true)
-class Task {
-  String id;
-  String name;
-  Protocol? protocol;
-  Meta meta;
-  Status status;
-  bool uploading;
-  Progress progress;
-  DateTime createdAt;
-  DateTime updatedAt;
+class Task extends Equatable {
+  final String id;
+  final String name;
+  final Protocol? protocol;
+  final Meta meta;
+  final Status status;
+  final bool uploading;
+  final Progress progress;
+  final DateTime createdAt;
+  final DateTime updatedAt;
 
-  Task({
+  const Task({
+    this.protocol,
     required this.id,
     required this.name,
     required this.meta,
@@ -30,6 +32,9 @@ class Task {
     required this.createdAt,
     required this.updatedAt,
   });
+
+  @override
+  List<Object> get props => [id];
 
   factory Task.fromJson(Map<String, dynamic> json) => _$TaskFromJson(json);
 
@@ -52,8 +57,7 @@ class Progress {
     required this.uploaded,
   });
 
-  factory Progress.fromJson(Map<String, dynamic> json) =>
-      _$ProgressFromJson(json);
+  factory Progress.fromJson(Map<String, dynamic> json) => _$ProgressFromJson(json);
 
   Map<String, dynamic> toJson() => _$ProgressToJson(this);
 }

@@ -1,21 +1,16 @@
-import 'package:flutter/material.dart';
-
-import '../../icon/gopeed_icons.dart';
+import 'package:fluent_ui/fluent_ui.dart' hide FluentIcons;
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
 enum SortState { none, asc, desc }
 
 class SortIconButton extends StatefulWidget {
-  final double size;
-  final Color? color;
-  final Color? activeColor;
+  final String label;
   final SortState initialState;
   final Function(SortState) onStateChanged;
 
   const SortIconButton({
     Key? key,
-    this.size = 18.0,
-    this.color,
-    this.activeColor,
+    required this.label,
     this.initialState = SortState.none,
     required this.onStateChanged,
   }) : super(key: key);
@@ -52,50 +47,19 @@ class _SortIconState extends State<SortIconButton> {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      customBorder: const CircleBorder(),
-      onTap: _toggleState,
-      child: SizedBox(
-        width: widget.size,
-        height: widget.size,
-        child: _currentState == SortState.none
-            ? Icon(
-                Gopeed.sort,
-                size: widget.size,
-                color: widget.color,
-              )
-            : Column(
-                children: [
-                  ClipRect(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      heightFactor: 0.5,
-                      child: Icon(
-                        Gopeed.sort,
-                        size: widget.size,
-                        color: _currentState == SortState.asc
-                            ? (widget.activeColor ??
-                                Theme.of(context).colorScheme.primary)
-                            : widget.color,
-                      ),
-                    ),
-                  ),
-                  ClipRect(
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      heightFactor: 0.5,
-                      child: Icon(
-                        Gopeed.sort,
-                        size: widget.size,
-                        color: _currentState == SortState.desc
-                            ? (widget.activeColor ??
-                                Theme.of(context).colorScheme.primary)
-                            : widget.color,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+    final theme = FluentTheme.of(context);
+    return IconButton(
+      onPressed: _toggleState,
+      icon: Row(
+        spacing: 4,
+        children: [
+          Text(widget.label, style: theme.typography.bodyStrong),
+          ?switch (_currentState) {
+            SortState.none => null,
+            SortState.asc => const Icon(FluentIcons.chevron_up_16_filled, size: 16),
+            SortState.desc => const Icon(FluentIcons.chevron_down_16_filled, size: 16),
+          },
+        ],
       ),
     );
   }

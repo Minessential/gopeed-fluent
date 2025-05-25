@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:args/args.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:get/get.dart';
+import 'package:gopeed/util/notifications.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'api/api.dart' as api;
@@ -16,7 +20,6 @@ import 'util/locale_manager.dart';
 import 'util/log_util.dart';
 import 'util/package_info.dart';
 import 'util/scheme_register/scheme_register.dart';
-import 'util/updater.dart';
 import 'util/util.dart';
 
 class Args {
@@ -47,25 +50,44 @@ Future<void> init(Args args) async {
   }
   await Util.initStorageDir();
   await Database.instance.init();
+  ///TODO Msix Pack
   if (Util.isDesktop()) {
+    if (Platform.isWindows) {
+      const initializationSettings = InitializationSettings(
+        windows: WindowsInitializationSettings(
+          appName: 'Gopeed(Fluent)',
+          appUserModelId: 'Mine.Gopeed.Fluent',
+          guid: '0197064E-A982-7D4A-8AAA-B3F15AF86E60',
+        ),
+      );
+      await flutterLocalNotificationsPlugin.initialize(
+        initializationSettings,
+        // onDidReceiveNotificationResponse: selectNotificationStream.add,
+        // onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
+      );
+
+      // final NotificationAppLaunchDetails? notificationAppLaunchDetails = !kIsWeb &&
+      //         Platform.isLinux
+      //     ? null
+      //     : await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
+      // String initialRoute = HomePage.routeName;
+      // if (notificationAppLaunchDetails?.didNotificationLaunchApp ?? false) {
+      //   selectedNotificationPayload =
+      //       notificationAppLaunchDetails!.notificationResponse?.payload;
+      //   initialRoute = SecondPage.routeName;
+      // }
+    }
     await windowManager.ensureInitialized();
     final windowState = Database.instance.getWindowState();
-    final windowOptions = WindowOptions(
-      size: Size(windowState?.width ?? 800, windowState?.height ?? 600),
-      center: true,
-      skipTaskbar: false,
-    );
-    await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      if (!args.hidden) {
-        await windowManager.show();
-        await windowManager.focus();
-      }
+    windowManager.waitUntilReadyToShow().then((_) async {
+      await windowManager.setTitleBarStyle(TitleBarStyle.hidden, windowButtonVisibility: false);
+      await windowManager.setMinimumSize(const Size(500, 300));
+      await windowManager.setSize(Size(windowState?.width ?? 800, windowState?.height ?? 600));
+      await windowManager.setAlignment(Alignment.center);
+      await windowManager.show();
+      await windowManager.focus();
+      await windowManager.setSkipTaskbar(false);
       await windowManager.setPreventClose(true);
-      // windows_manager has a bug where when window to be maximized, it will be unmaximized immediately, so can't implement this feature currently.
-      // https://github.com/leanflutter/window_manager/issues/412
-      // if (windowState.isMaximized) {
-      //   await windowManager.maximize();
-      // }
     });
   }
 
@@ -113,15 +135,8 @@ Future<void> init(Args args) async {
         try {
           await installManifest(browser);
         } catch (e) {
-          logger.e(
-              "browser [${browser.name}] extension host integration fail", e);
+          logger.e("browser [${browser.name}] extension host integration fail", e);
         }
-      }
-
-      try {
-        await installUpdater();
-      } catch (e) {
-        logger.e("updater install fail", e);
       }
     }
   }();
@@ -138,8 +153,7 @@ Future<void> onStart() async {
         logger.w("missing language: $lang");
         return;
       }
-      final missingKeys =
-          fullMessages!.keys.where((key) => langMessages[key] == null);
+      final missingKeys = fullMessages!.keys.where((key) => langMessages[key] == null);
       if (missingKeys.isNotEmpty) {
         logger.w("missing language: $lang, keys: $missingKeys");
       }

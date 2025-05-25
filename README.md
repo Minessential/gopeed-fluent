@@ -1,3 +1,28 @@
+# Gopeed(Fluent) 
+<a title="Made with Fluent Design" href="https://github.com/bdlukaa/fluent_ui">
+  <img
+    src="https://img.shields.io/badge/fluent-design-blue?style=flat-square&color=gray&labelColor=0078D7"
+  />
+</a>
+
+* Fluent UI for Gopeed, just tested on Windows!
+* Add notifications for task success and task failure (Windows only, just notice)
+* Move the data directory to %APPDATA%
+
+## Screenshots
+<p align="center">
+  <img src="./assets/screenshots/1.png" width="45%" />
+  <img src="./assets/screenshots/2.png" width="45%" />
+</p>
+<p align="center">
+  <img src="./assets/screenshots/3.png" width="45%" />
+  <img src="./assets/screenshots/4.png" width="45%" />
+</p>
+<img src="./assets/screenshots/5.png" />
+
+---
+# **Here are the original Gopeed instructions.**
+
 # [![](_docs/img/banner.png)](https://gopeed.com)
 
 [![Test Status](https://github.com/GopeedLab/gopeed/workflows/test/badge.svg)](https://github.com/GopeedLab/gopeed/actions?query=workflow%3Atest)
