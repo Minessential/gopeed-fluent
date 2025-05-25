@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 class ResponsiveBuilder extends StatelessWidget {
   const ResponsiveBuilder({
@@ -23,15 +23,12 @@ class ResponsiveBuilder extends StatelessWidget {
     BoxConstraints constraints,
   ) wideBuilder;
 
-  static bool isNarrow(BuildContext context) =>
-      MediaQuery.of(context).size.width < 768;
+  static bool isNarrow(BuildContext context) => MediaQuery.of(context).size.width < 768;
 
   static bool isMedium(BuildContext context) =>
-      MediaQuery.of(context).size.width < 992 &&
-      MediaQuery.of(context).size.width >= 768;
+      MediaQuery.of(context).size.width < 992 && MediaQuery.of(context).size.width >= 768;
 
-  static bool isWide(BuildContext context) =>
-      MediaQuery.of(context).size.width >= 992;
+  static bool isWide(BuildContext context) => MediaQuery.of(context).size.width >= 992;
 
   @override
   Widget build(BuildContext context) {

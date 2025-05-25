@@ -3,7 +3,7 @@ import 'package:get/get.dart';
 import '../../../../util/updater.dart';
 
 class SettingController extends GetxController {
-  final tapStatues = <String, bool>{}.obs;
+  final advance = false.obs;
   final latestVersion = Rxn<VersionInfo>();
 
   @override
@@ -12,16 +12,7 @@ class SettingController extends GetxController {
     fetchLatestVersion();
   }
 
-  // set all tap status to false
-  void clearTap() {
-    tapStatues.updateAll((key, value) => false);
-  }
-
-  // set one tap status to true
-  void onTap(String key) {
-    clearTap();
-    tapStatues[key] = true;
-  }
+  void toggleAdvance(bool value) => advance.value = value;
 
   // fetch latest version
   void fetchLatestVersion() async {

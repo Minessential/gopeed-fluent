@@ -7,6 +7,7 @@ part of 'task.dart';
 // **************************************************************************
 
 Task _$TaskFromJson(Map<String, dynamic> json) => Task(
+      protocol: $enumDecodeNullable(_$ProtocolEnumMap, json['protocol']),
       id: json['id'] as String,
       name: json['name'] as String,
       meta: Meta.fromJson(json['meta'] as Map<String, dynamic>),
@@ -15,7 +16,7 @@ Task _$TaskFromJson(Map<String, dynamic> json) => Task(
       progress: Progress.fromJson(json['progress'] as Map<String, dynamic>),
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
-    )..protocol = $enumDecodeNullable(_$ProtocolEnumMap, json['protocol']);
+    );
 
 Map<String, dynamic> _$TaskToJson(Task instance) {
   final val = <String, dynamic>{
@@ -39,6 +40,11 @@ Map<String, dynamic> _$TaskToJson(Task instance) {
   return val;
 }
 
+const _$ProtocolEnumMap = {
+  Protocol.http: 'http',
+  Protocol.bt: 'bt',
+};
+
 const _$StatusEnumMap = {
   Status.ready: 'ready',
   Status.running: 'running',
@@ -46,11 +52,6 @@ const _$StatusEnumMap = {
   Status.wait: 'wait',
   Status.error: 'error',
   Status.done: 'done',
-};
-
-const _$ProtocolEnumMap = {
-  Protocol.http: 'http',
-  Protocol.bt: 'bt',
 };
 
 Progress _$ProgressFromJson(Map<String, dynamic> json) => Progress(

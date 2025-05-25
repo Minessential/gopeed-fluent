@@ -30,11 +30,7 @@ class Util {
   }
 
   static String safePathJoin(List<String> paths) {
-    return paths
-        .where((e) => e.isNotEmpty)
-        .map((e) => safeDir(e))
-        .join("/")
-        .replaceAll(RegExp(r'//'), "/");
+    return paths.where((e) => e.isNotEmpty).map((e) => safeDir(e)).join("/").replaceAll(RegExp(r'//'), "/");
   }
 
   static String fmtByte(int byte) {
@@ -54,7 +50,8 @@ class Util {
   static Future<void> initStorageDir() async {
     var storageDir = "";
     if (Util.isWindows()) {
-      storageDir = File(Platform.resolvedExecutable).parent.path;
+      final appData = Platform.environment['APPDATA'];
+      storageDir = '$appData\\Gopeed(Fluent)';
     } else if (!Util.isWeb()) {
       if (Util.isLinux()) {
         storageDir = File(Platform.resolvedExecutable).parent.path;
@@ -133,17 +130,19 @@ class Util {
     Object lastError;
     var count = futures.length;
     for (var future in futures) {
-      future.then((value) {
-        if (!completer.isCompleted) {
-          completer.complete(value);
-        }
-      }).catchError((e) {
-        lastError = e;
-        count--;
-        if (count == 0) {
-          completer.completeError(lastError);
-        }
-      });
+      future
+          .then((value) {
+            if (!completer.isCompleted) {
+              completer.complete(value);
+            }
+          })
+          .catchError((e) {
+            lastError = e;
+            count--;
+            if (count == 0) {
+              completer.completeError(lastError);
+            }
+          });
     }
     return completer.future;
   }
@@ -157,13 +156,14 @@ class Util {
   }
 
   static String homePathJoin(String fileName) {
-    final execPath = Platform.resolvedExecutable;
-    final execDir = path.dirname(execPath);
-    return path.join(execDir, fileName);
+    // final execPath = Platform.resolvedExecutable;
+    // final execDir = path.dirname(execPath);
+    final appData = path.join(Platform.environment['APPDATA'] ?? '', 'Gopeed(Fluent)');
+    // final storageDir = '$appData\\';
+    return path.join(appData, fileName);
   }
 
-  static Future<void> installAsset(String assetPath, String targetPath,
-      {bool executable = false}) async {
+  static Future<void> installAsset(String assetPath, String targetPath, {bool executable = false}) async {
     Future<List<int>> getAssetData() async {
       final asset = await rootBundle.load(assetPath);
       return asset.buffer.asUint8List(asset.offsetInBytes, asset.lengthInBytes);
