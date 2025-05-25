@@ -20,6 +20,8 @@ import '../modules/task/bindings/task_files_binding.dart';
 import '../modules/task/views/task_done_view.dart';
 import '../modules/task/views/task_files_view.dart';
 import '../modules/task/views/task_view.dart';
+import '../modules/task/bindings/task_done_binding.dart';
+import '../modules/task/views/task_done_view.dart';
 
 part 'app_routes.dart';
 

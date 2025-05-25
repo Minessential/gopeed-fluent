@@ -137,6 +137,8 @@ const enUS = {
     'fileSelectedSize': 'Size: ',
     'httpHeaderName': 'Header Name',
     'httpHeaderValue': 'Header Value',
+    'notificationDownloaded': 'Download Completed',
+    'notificationError': 'Download Error',
     'login': 'Login',
     'username_required': 'Please enter your username',
     'password_required': 'Please enter your password',

@@ -137,6 +137,8 @@ const zhCN = {
     'fileSelectedSize': '大小：',
     'httpHeaderName': '请求头名称',
     'httpHeaderValue': '请求头值',
+    'notificationDownloaded': '下载完成',
+    'notificationError': '下载错误',
     'login': '登录',
     'username_required': '请输入用户名',
     'password_required': '请输入密码',
