@@ -28,17 +28,14 @@ class LoginController extends GetxController {
     passwordVisible.value = !passwordVisible.value;
   }
 
-  Future<void> login() async {
+  Future<void> login(BuildContext context) async {
     if (!formKey.currentState!.validate()) {
       return;
     }
 
     isLoading.value = true;
     try {
-      final loginReq = LoginReq(
-        username: usernameController.text.trim(),
-        password: passwordController.text,
-      );
+      final loginReq = LoginReq(username: usernameController.text.trim(), password: passwordController.text);
 
       final token = await api.login(loginReq);
       // Login successful, save the token
@@ -50,9 +47,11 @@ class LoginController extends GetxController {
       Get.rootDelegate.offAndToNamed(Routes.HOME);
     } catch (e) {
       if (e is TimeoutException) {
-        showMessage('error'.tr, 'login_failed_network'.tr);
+        if (!context.mounted) return;
+        showMessage(context, 'error'.tr, 'login_failed_network'.tr);
       } else {
-        showMessage('error'.tr, 'login_failed'.tr);
+        if (!context.mounted) return;
+        showMessage(context, 'error'.tr, 'login_failed'.tr);
       }
     } finally {
       isLoading.value = false;

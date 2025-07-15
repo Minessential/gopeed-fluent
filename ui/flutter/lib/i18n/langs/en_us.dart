@@ -142,8 +142,7 @@ const enUS = {
     'password_required': 'Please enter your password',
     'login_success': 'Login successful',
     'login_failed': 'Login failed, please check your username and password',
-    'login_failed_network':
-        'Login failed, please check your network connection',
+    'login_failed_network': 'Login failed, please check your network connection',
     'notificationDownloaded': 'Download Completed',
     'notificationError': 'Download Error',
   },
