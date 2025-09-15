@@ -428,7 +428,7 @@ class SettingView extends GetView<SettingController> {
     );
 
     Widget? buildBtDefaultClientConfig() {
-      if (Util.isWindows()) return null;
+      if (!Util.isWindows()) return null;
       return _SettingItem(
         icon: FluentIcons.calendar_checkmark_24_regular,
         title: 'setAsDefaultBtClient'.tr,
@@ -530,6 +530,21 @@ class SettingView extends GetView<SettingController> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            _SettingItem(
+              icon: FluentIcons.megaphone_24_regular,
+              title: 'notifyWhenNewVersion'.tr,
+              trailing: Obx(
+                () => ToggleSwitch(
+                  content: Text(downloaderCfg.value.extra.notifyWhenNewVersion ? 'on'.tr : 'off'.tr),
+                  leadingContent: true,
+                  checked: downloaderCfg.value.extra.notifyWhenNewVersion,
+                  onChanged: (bool value) async {
+                    downloaderCfg.update((val) => val!.extra.notifyWhenNewVersion = value);
+                    await debounceSave();
+                  },
+                ),
+              ),
+            ),
             _SettingItem(
               title: 'appNameMod'.tr,
               subTitle: 'modDesc'.tr,

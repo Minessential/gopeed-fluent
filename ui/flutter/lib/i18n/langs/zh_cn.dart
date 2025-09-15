@@ -145,7 +145,5 @@ const zhCN = {
     'login_success': '登录成功',
     'login_failed': '登录失败，请检查用户名和密码',
     'login_failed_network': '登录失败，请检查网络连接',
-    'notificationDownloaded': '下载完成',
-    'notificationError': '下载错误',
   },
 };

@@ -266,8 +266,8 @@ class AppController extends GetxController with WindowListener, TrayListener {
         priority: NotificationPriority.LOW,
       ),
       iosNotificationOptions: const IOSNotificationOptions(showNotification: true, playSound: false),
-      foregroundTaskOptions: ForegroundTaskOptions(
-        eventAction: ForegroundTaskEventAction.repeat(5000),
+      foregroundTaskOptions: const ForegroundTaskOptions(
+        interval: 5000,
         autoRunOnBoot: true,
         allowWakeLock: true,
         allowWifiLock: true,
@@ -280,12 +280,10 @@ class AppController extends GetxController with WindowListener, TrayListener {
       FlutterForegroundTask.startService(
         notificationTitle: "serviceTitle".tr,
         notificationText: "serviceText".tr,
-        notificationIcon: const NotificationIcon(
-          ///TODO: Android should implement here
-          ///reference: [https://github.com/Dev-hwang/flutter_foreground_task/blob/master/documentation/customize_notification_icon.md]
-          metaDataName: 'com.your_package.service.SNOW_ICON',
-          backgroundColor: Colors.transparent,
-        ),
+
+        ///TODO: Android should implement here
+        ///reference: [https://github.com/Dev-hwang/flutter_foreground_task/blob/master/documentation/customize_notification_icon.md]
+        notificationIcon: null,
       );
     }
   }
