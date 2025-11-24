@@ -26,7 +26,7 @@ const _firefoxNativeHostsKey = r'Software\Mozilla\NativeMessagingHosts';
 
 /// Install host binary for browser extension
 Future<void> doInstallHost() async {
-  final hostPath = Util.homePathJoin(_hostExecName);
+  final hostPath = await Util.homePathJoin(_hostExecName);
   await Util.installAsset('assets/exec/$_hostExecName', hostPath,
       executable: true);
 }
@@ -51,6 +51,7 @@ Future<bool> doCheckBrowserInstalled(Browser browser) async {
         return await _checkWindowsRegistry(r'SOFTWARE\Mozilla\Firefox') ||
             await _checkWindowsRegistry(
                 r'SOFTWARE\WOW6432Node\Mozilla\Firefox') ||
+            await _checkWindowsRegistry(r'SOFTWARE\BrowserWorks\Waterfox') ||
             await _checkWindowsExecutable(browser);
     }
   } else {
@@ -62,7 +63,7 @@ Future<bool> doCheckBrowserInstalled(Browser browser) async {
 Future<bool> doCheckManifestInstalled(Browser browser) async {
   if (await checkBrowserInstalled(browser) == false) return false;
 
-  final manifestPath = _getManifestPath(browser);
+  final manifestPath = await _getManifestPath(browser);
   if (manifestPath == null) return false;
 
   if (Platform.isWindows) {
@@ -86,7 +87,7 @@ Future<void> doInstallManifest(Browser browser) async {
   if (await checkBrowserInstalled(browser) == false) return;
   if (await checkManifestInstalled(browser)) return;
 
-  final manifestPath = _getManifestPath(browser)!;
+  final manifestPath = (await _getManifestPath(browser))!;
   final manifestContent = await _getManifestContent(browser);
   final manifestDir = path.dirname(manifestPath);
   await Directory(manifestDir).create(recursive: true);
@@ -144,6 +145,10 @@ List<String> _getWindowsExecutablePaths(Browser browser) {
           path.join(programFiles, 'Mozilla Firefox', 'firefox.exe'),
         if (programFilesX86 != null)
           path.join(programFilesX86, 'Mozilla Firefox', 'firefox.exe'),
+        if (programFiles != null)
+          path.join(programFiles, 'Waterfox', 'waterfox.exe'),
+        if (programFilesX86 != null)
+          path.join(programFilesX86, 'Waterfox', 'waterfox.exe'),
       ];
   }
 }
@@ -178,7 +183,10 @@ List<String> _getUnixExecutablePaths(Browser browser) {
         return [
           '/Applications/Firefox.app',
           '~/Applications/Firefox.app',
-          '/Users/${Platform.environment['USER']}/Applications/Firefox.app'
+          '/Users/${Platform.environment['USER']}/Applications/Firefox.app',
+          '/Applications/Waterfox.app',
+          '~/Applications/Waterfox.app',
+          '/Users/${Platform.environment['USER']}/Applications/Waterfox.app'
         ];
     }
   } else {
@@ -203,17 +211,21 @@ List<String> _getUnixExecutablePaths(Browser browser) {
           '/usr/bin/firefox',
           '/snap/bin/firefox',
           '/usr/lib/firefox/firefox',
-          '/opt/firefox/firefox'
+          '/opt/firefox/firefox',
+          '/usr/bin/waterfox',
+          '/snap/bin/waterfox',
+          '/usr/lib/waterfox/waterfox',
+          '/opt/waterfox/waterfox'
         ];
     }
   }
 }
 
-String? _getManifestPath(Browser browser) {
+Future<String?> _getManifestPath(Browser browser) async {
   final manifestName =
       browser == Browser.firefox ? '$_hostName.moz.json' : '$_hostName.json';
   if (Platform.isWindows) {
-    return Util.homePathJoin(manifestName);
+    return await Util.homePathJoin(manifestName);
   }
 
   final home =
@@ -259,7 +271,7 @@ Future<bool> _checkWindowsRegistry(String keyPath) async {
 }
 
 Future<String> _getManifestContent(Browser browser) async {
-  final hostPath = Util.homePathJoin(_hostExecName);
+  final hostPath = await Util.homePathJoin(_hostExecName);
   final manifest = {
     'name': _hostName,
     'description': 'Gopeed browser extension host',

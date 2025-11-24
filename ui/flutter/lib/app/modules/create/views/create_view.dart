@@ -29,7 +29,6 @@ import '../../../views/file_tree_view.dart';
 import '../../app/controllers/app_controller.dart';
 import '../../history/views/history_view.dart';
 import '../controllers/create_controller.dart';
-import '../dto/create_router_params.dart';
 
 class CreateView extends GetView<CreateController> {
   final _confirmFormKey = GlobalKey<FormState>();
@@ -67,7 +66,7 @@ class CreateView extends GetView<CreateController> {
       _pathController.text = appController.downloaderConfig.value.downloadDir;
     }
 
-    final CreateRouterParams? routerParams = Get.rootDelegate.arguments();
+    final CreateTask? routerParams = Get.rootDelegate.arguments();
     if (routerParams?.req?.url.isNotEmpty ?? false) {
       // get url from route arguments
       final url = routerParams!.req!.url;

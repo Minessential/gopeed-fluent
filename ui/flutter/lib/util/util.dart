@@ -30,7 +30,11 @@ class Util {
   }
 
   static String safePathJoin(List<String> paths) {
-    return paths.where((e) => e.isNotEmpty).map((e) => safeDir(e)).join("/").replaceAll(RegExp(r'//'), "/");
+    return paths
+        .where((e) => e.isNotEmpty)
+        .map((e) => safeDir(e))
+        .join("/")
+        .replaceAll(RegExp(r'//'), "/");
   }
 
   static String fmtByte(int byte) {
@@ -155,15 +159,22 @@ class Util {
     };
   }
 
-  static String homePathJoin(String fileName) {
-    // final execPath = Platform.resolvedExecutable;
-    // final execDir = path.dirname(execPath);
-    final appData = path.join(Platform.environment['APPDATA'] ?? '', 'Gopeed(Fluent)');
-    // final storageDir = '$appData\\';
-    return path.join(appData, fileName);
+  static Future<String> homePathJoin(String fileName) async {
+    if (Util.isWindows()) {
+      final execPath = Platform.resolvedExecutable;
+      final execDir = path.dirname(execPath);
+      return path.join(execDir, fileName);
+    }
+
+    final dir = await getApplicationSupportDirectory();
+    return path.join(dir.path, fileName);
   }
 
-  static Future<void> installAsset(String assetPath, String targetPath, {bool executable = false}) async {
+  static Future<void> installAsset(
+    String assetPath,
+    String targetPath, {
+    bool executable = false,
+  }) async {
     Future<List<int>> getAssetData() async {
       final asset = await rootBundle.load(assetPath);
       return asset.buffer.asUint8List(asset.offsetInBytes, asset.lengthInBytes);

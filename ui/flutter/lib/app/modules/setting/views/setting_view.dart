@@ -45,7 +45,10 @@ class SettingView extends GetView<SettingController> {
     final startCfg = appController.startConfig;
 
     Timer? timer;
-    Future<bool> debounceSave({Future<String> Function()? check, bool needRestart = false}) {
+    Future<bool> debounceSave({
+      Future<String> Function()? check,
+      bool needRestart = false,
+    }) {
       var completer = Completer<bool>();
       timer?.cancel();
       timer = Timer(const Duration(milliseconds: 1000), () async {
@@ -57,7 +60,10 @@ class SettingView extends GetView<SettingController> {
             return;
           }
         }
-        appController.saveConfig().then((_) => completer.complete(true)).onError(completer.completeError);
+        appController
+            .saveConfig()
+            .then((_) => completer.complete(true))
+            .onError(completer.completeError);
         if (needRestart && context.mounted) {
           showMessage(context, 'tip'.tr, 'effectAfterRestart'.tr);
         }
@@ -92,11 +98,16 @@ class SettingView extends GetView<SettingController> {
       'maxRunning',
       trailing: Obx(() => Text(downloaderCfg.value.maxRunning.toString())),
       keyBuilder: (Key key) {
-        final maxRunningController = TextEditingController(text: downloaderCfg.value.maxRunning.toString());
+        final maxRunningController = TextEditingController(
+          text: downloaderCfg.value.maxRunning.toString(),
+        );
         maxRunningController.addListener(() async {
           if (maxRunningController.text.isNotEmpty &&
-              maxRunningController.text != downloaderCfg.value.maxRunning.toString()) {
-            downloaderCfg.update((val) => val!.maxRunning = int.parse(maxRunningController.text));
+              maxRunningController.text !=
+                  downloaderCfg.value.maxRunning.toString()) {
+            downloaderCfg.update(
+              (val) => val!.maxRunning = int.parse(maxRunningController.text),
+            );
             await debounceSave();
           }
         });
@@ -106,7 +117,10 @@ class SettingView extends GetView<SettingController> {
           focusNode: FocusNode(),
           controller: maxRunningController,
           keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly, NumericalRangeFormatter(min: 1, max: 256)],
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            NumericalRangeFormatter(min: 1, max: 256),
+          ],
         );
       },
     );
@@ -117,11 +131,17 @@ class SettingView extends GetView<SettingController> {
         title: 'defaultDirectDownload'.tr,
         trailing: Obx(
           () => ToggleSwitch(
-            content: Text(downloaderCfg.value.extra.defaultDirectDownload ? 'on'.tr : 'off'.tr),
+            content: Text(
+              downloaderCfg.value.extra.defaultDirectDownload
+                  ? 'on'.tr
+                  : 'off'.tr,
+            ),
             leadingContent: true,
             checked: downloaderCfg.value.extra.defaultDirectDownload,
             onChanged: (bool value) async {
-              downloaderCfg.update((val) => val!.extra.defaultDirectDownload = value);
+              downloaderCfg.update(
+                (val) => val!.extra.defaultDirectDownload = value,
+              );
               await debounceSave();
             },
           ),
@@ -143,7 +163,10 @@ class SettingView extends GetView<SettingController> {
               "Edge",
               "https://microsoftedge.microsoft.com/addons/detail/dkajnckekendchdleoaenoophcobooce",
             ),
-            _buildLinkItem("Firefox", "https://addons.mozilla.org/zh-CN/firefox/addon/gopeed-extension"),
+            _buildLinkItem(
+              "Firefox",
+              "https://addons.mozilla.org/zh-CN/firefox/addon/gopeed-extension",
+            ),
           ],
         ),
       );
@@ -184,28 +207,46 @@ class SettingView extends GetView<SettingController> {
       'User-Agent',
       subWidget: Obx(() => Text(appController.httpConfig.userAgent)),
       keyBuilder: (Key key) {
-        final uaController = TextEditingController(text: appController.httpConfig.userAgent);
+        final uaController = TextEditingController(
+          text: appController.httpConfig.userAgent,
+        );
         uaController.addListener(() async {
-          if (uaController.text.isNotEmpty && uaController.text != appController.httpConfig.userAgent) {
-            downloaderCfg.update((val) => val!.protocolConfig.http.userAgent = uaController.text);
+          if (uaController.text.isNotEmpty &&
+              uaController.text != appController.httpConfig.userAgent) {
+            downloaderCfg.update(
+              (val) => val!.protocolConfig.http.userAgent = uaController.text,
+            );
             await debounceSave();
           }
         });
 
-        return TextBox(key: key, focusNode: FocusNode(), controller: uaController);
+        return TextBox(
+          key: key,
+          focusNode: FocusNode(),
+          controller: uaController,
+        );
       },
     );
 
     final buildHttpConnections = _buildConfigItem(
       FluentIcons.plug_connected_settings_24_regular,
       'connections',
-      trailing: Obx(() => Text(appController.httpConfig.connections.toString())),
+      trailing: Obx(
+        () => Text(appController.httpConfig.connections.toString()),
+      ),
       keyBuilder: (Key key) {
-        final connectionsController = TextEditingController(text: appController.httpConfig.connections.toString());
+        final connectionsController = TextEditingController(
+          text: appController.httpConfig.connections.toString(),
+        );
         connectionsController.addListener(() async {
           if (connectionsController.text.isNotEmpty &&
-              connectionsController.text != appController.httpConfig.connections.toString()) {
-            downloaderCfg.update((val) => val!.protocolConfig.http.connections = int.parse(connectionsController.text));
+              connectionsController.text !=
+                  appController.httpConfig.connections.toString()) {
+            downloaderCfg.update(
+              (val) => val!.protocolConfig.http.connections = int.parse(
+                connectionsController.text,
+              ),
+            );
             await debounceSave();
           }
         });
@@ -215,7 +256,10 @@ class SettingView extends GetView<SettingController> {
           focusNode: FocusNode(),
           controller: connectionsController,
           keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly, NumericalRangeFormatter(min: 1, max: 256)],
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            NumericalRangeFormatter(min: 1, max: 256),
+          ],
         );
       },
     );
@@ -226,11 +270,15 @@ class SettingView extends GetView<SettingController> {
         title: 'useServerCtime'.tr,
         trailing: Obx(
           () => ToggleSwitch(
-            content: Text(appController.httpConfig.useServerCtime ? 'on'.tr : 'off'.tr),
+            content: Text(
+              appController.httpConfig.useServerCtime ? 'on'.tr : 'off'.tr,
+            ),
             leadingContent: true,
             checked: appController.httpConfig.useServerCtime,
             onChanged: (bool value) {
-              downloaderCfg.update((val) => val!.protocolConfig.http.useServerCtime = value);
+              downloaderCfg.update(
+                (val) => val!.protocolConfig.http.useServerCtime = value,
+              );
               debounceSave();
             },
           ),
@@ -244,11 +292,18 @@ class SettingView extends GetView<SettingController> {
       'port',
       trailing: Obx(() => Text(appController.btConfig.listenPort.toString())),
       keyBuilder: (Key key) {
-        final listenPortController = TextEditingController(text: appController.btConfig.listenPort.toString());
+        final listenPortController = TextEditingController(
+          text: appController.btConfig.listenPort.toString(),
+        );
         listenPortController.addListener(() async {
           if (listenPortController.text.isNotEmpty &&
-              listenPortController.text != appController.btConfig.listenPort.toString()) {
-            downloaderCfg.update((val) => val!.protocolConfig.bt.listenPort = int.parse(listenPortController.text));
+              listenPortController.text !=
+                  appController.btConfig.listenPort.toString()) {
+            downloaderCfg.update(
+              (val) => val!.protocolConfig.bt.listenPort = int.parse(
+                listenPortController.text,
+              ),
+            );
             await debounceSave();
           }
         });
@@ -258,7 +313,10 @@ class SettingView extends GetView<SettingController> {
           focusNode: FocusNode(),
           controller: listenPortController,
           keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly, NumericalRangeFormatter(min: 0, max: 65535)],
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            NumericalRangeFormatter(min: 0, max: 65535),
+          ],
         );
       },
     );
@@ -267,7 +325,12 @@ class SettingView extends GetView<SettingController> {
       FluentIcons.link_multiple_24_regular,
       'subscribeTracker',
       trailing: Obx(
-        () => Text('items'.trParams({'count': appController.btExtConfig.trackerSubscribeUrls.length.toString()})),
+        () => Text(
+          'items'.trParams({
+            'count': appController.btExtConfig.trackerSubscribeUrls.length
+                .toString(),
+          }),
+        ),
       ),
       keyBuilder: (Key key) {
         final trackerUpdateController = OutlinedButtonLoadingController();
@@ -281,7 +344,9 @@ class SettingView extends GetView<SettingController> {
                 items: allTrackerSubscribeUrls,
                 checked: appController.btExtConfig.trackerSubscribeUrls,
                 onChanged: (value) {
-                  downloaderCfg.update((val) => val!.extra.bt.trackerSubscribeUrls = value);
+                  downloaderCfg.update(
+                    (val) => val!.extra.bt.trackerSubscribeUrls = value,
+                  );
                   debounceSave();
                 },
               ),
@@ -290,7 +355,9 @@ class SettingView extends GetView<SettingController> {
               () => ToggleSwitch(
                 checked: appController.btExtConfig.autoUpdateTrackers,
                 onChanged: (bool value) {
-                  downloaderCfg.update((val) => val!.extra.bt.autoUpdateTrackers = value);
+                  downloaderCfg.update(
+                    (val) => val!.extra.bt.autoUpdateTrackers = value,
+                  );
                   debounceSave();
                 },
                 content: Text('updateDaily'.tr),
@@ -305,7 +372,8 @@ class SettingView extends GetView<SettingController> {
                     try {
                       await appController.trackerUpdate();
                     } catch (e) {
-                      if (context.mounted) showErrorMessage(context, 'subscribeFail'.tr);
+                      if (context.mounted)
+                        showErrorMessage(context, 'subscribeFail'.tr);
                     } finally {
                       trackerUpdateController.stop();
                     }
@@ -317,8 +385,14 @@ class SettingView extends GetView<SettingController> {
                   child: Obx(
                     () => Text(
                       'lastUpdate'.trParams({
-                        'time': appController.btExtConfig.lastTrackerUpdateTime != null
-                            ? DateFormat('yyyy-MM-dd HH:mm:ss').format(appController.btExtConfig.lastTrackerUpdateTime!)
+                        'time':
+                            appController.btExtConfig.lastTrackerUpdateTime !=
+                                null
+                            ? DateFormat('yyyy-MM-dd HH:mm:ss').format(
+                                appController
+                                    .btExtConfig
+                                    .lastTrackerUpdateTime!,
+                              )
                             : '',
                       }),
                     ),
@@ -335,11 +409,17 @@ class SettingView extends GetView<SettingController> {
       FluentIcons.cloud_link_24_regular,
       'addTracker',
       trailing: Obx(
-        () => Text('items'.trParams({'count': appController.btExtConfig.customTrackers.length.toString()})),
+        () => Text(
+          'items'.trParams({
+            'count': appController.btExtConfig.customTrackers.length.toString(),
+          }),
+        ),
       ),
       keyBuilder: (Key key) {
         final trackersController = TextEditingController(
-          text: appController.btExtConfig.customTrackers.join('\r\n').toString(),
+          text: appController.btExtConfig.customTrackers
+              .join('\r\n')
+              .toString(),
         );
         return TextBox(
           key: key,
@@ -349,7 +429,9 @@ class SettingView extends GetView<SettingController> {
           maxLines: 5,
           placeholder: 'addTrackerHit'.tr,
           onChanged: (value) async {
-            downloaderCfg.update((val) => val!.extra.bt.customTrackers = Util.textToLines(value));
+            downloaderCfg.update(
+              (val) => val!.extra.bt.customTrackers = Util.textToLines(value),
+            );
             appController.refreshTrackers();
             await debounceSave();
           },
@@ -360,25 +442,43 @@ class SettingView extends GetView<SettingController> {
     final buildBtSeedConfig = _buildConfigItem(
       FluentIcons.share_ios_24_regular,
       'seedConfig',
-      subWidget: Obx(() => Text('${'seedKeep'.tr}(${appController.btConfig.seedKeep ? 'on'.tr : 'off'.tr})')),
+      subWidget: Obx(
+        () => Text(
+          '${'seedKeep'.tr}(${appController.btConfig.seedKeep ? 'on'.tr : 'off'.tr})',
+        ),
+      ),
       keyBuilder: (Key key) {
-        final seedRatioController = TextEditingController(text: appController.btConfig.seedRatio.toString());
+        final seedRatioController = TextEditingController(
+          text: appController.btConfig.seedRatio.toString(),
+        );
         seedRatioController.addListener(() {
           if (seedRatioController.text.isNotEmpty) {
-            downloaderCfg.update((val) => val!.protocolConfig.bt.seedRatio = double.parse(seedRatioController.text));
+            downloaderCfg.update(
+              (val) => val!.protocolConfig.bt.seedRatio = double.parse(
+                seedRatioController.text,
+              ),
+            );
             debounceSave();
           }
         });
-        final seedTimeController = TextEditingController(text: (appController.btConfig.seedTime ~/ 60).toString());
+        final seedTimeController = TextEditingController(
+          text: (appController.btConfig.seedTime ~/ 60).toString(),
+        );
         seedTimeController.addListener(() {
           if (seedTimeController.text.isNotEmpty) {
-            downloaderCfg.update((val) => val!.protocolConfig.bt.seedTime = int.parse(seedTimeController.text) * 60);
+            downloaderCfg.update(
+              (val) => val!.protocolConfig.bt.seedTime =
+                  int.parse(seedTimeController.text) * 60,
+            );
             debounceSave();
           }
         });
         return Obx(
           () => Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12.0,
+              vertical: 8.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: 12,
@@ -389,9 +489,13 @@ class SettingView extends GetView<SettingController> {
                     ToggleSwitch(
                       leadingContent: true,
                       checked: appController.btConfig.seedKeep,
-                      content: Text(appController.btConfig.seedKeep ? 'on'.tr : 'off'.tr),
+                      content: Text(
+                        appController.btConfig.seedKeep ? 'on'.tr : 'off'.tr,
+                      ),
                       onChanged: (bool value) {
-                        downloaderCfg.update((val) => val!.protocolConfig.bt.seedKeep = value);
+                        downloaderCfg.update(
+                          (val) => val!.protocolConfig.bt.seedKeep = value,
+                        );
                         debounceSave();
                       },
                     ),
@@ -403,8 +507,14 @@ class SettingView extends GetView<SettingController> {
                         label: 'seedRatio'.tr,
                         child: TextBox(
                           controller: seedRatioController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'^\d+\.?\d{0,2}'),
+                            ),
+                          ],
                         ),
                       ),
                 appController.btConfig.seedKeep
@@ -434,7 +544,9 @@ class SettingView extends GetView<SettingController> {
         title: 'setAsDefaultBtClient'.tr,
         trailing: Obx(
           () => ToggleSwitch(
-            content: Text(downloaderCfg.value.extra.defaultBtClient ? 'on'.tr : 'off'.tr),
+            content: Text(
+              downloaderCfg.value.extra.defaultBtClient ? 'on'.tr : 'off'.tr,
+            ),
             leadingContent: true,
             checked: downloaderCfg.value.extra.defaultBtClient,
             onChanged: (bool value) async {
@@ -444,7 +556,9 @@ class SettingView extends GetView<SettingController> {
                 } else {
                   unregisterDefaultTorrentClient();
                 }
-                downloaderCfg.update((val) => val!.extra.defaultBtClient = value);
+                downloaderCfg.update(
+                  (val) => val!.extra.defaultBtClient = value,
+                );
                 await debounceSave();
               } catch (e) {
                 if (context.mounted) showErrorMessage(context, e);
@@ -498,7 +612,12 @@ class SettingView extends GetView<SettingController> {
             isExpanded: true,
             value: downloaderCfg.value.extra.locale,
             items: messages.keys.keys
-                .map((e) => ComboBoxItem(value: e, child: Text(messages.keys[e]!['label']!)))
+                .map(
+                  (e) => ComboBoxItem(
+                    value: e,
+                    child: Text(messages.keys[e]!['label']!),
+                  ),
+                )
                 .toList(),
             onChanged: (value) async {
               downloaderCfg.update((val) => val!.extra.locale = value!);
@@ -522,7 +641,9 @@ class SettingView extends GetView<SettingController> {
           return hasNewVersion
               ? badges.Badge(
                   position: badges.BadgePosition.topEnd(top: -3, end: -6),
-                  badgeStyle: const badges.BadgeStyle(padding: EdgeInsetsGeometry.all(3.5)),
+                  badgeStyle: const badges.BadgeStyle(
+                    padding: EdgeInsetsGeometry.all(3.5),
+                  ),
                   child: widget,
                 )
               : widget;
@@ -535,11 +656,17 @@ class SettingView extends GetView<SettingController> {
               title: 'notifyWhenNewVersion'.tr,
               trailing: Obx(
                 () => ToggleSwitch(
-                  content: Text(downloaderCfg.value.extra.notifyWhenNewVersion ? 'on'.tr : 'off'.tr),
+                  content: Text(
+                    downloaderCfg.value.extra.notifyWhenNewVersion
+                        ? 'on'.tr
+                        : 'off'.tr,
+                  ),
                   leadingContent: true,
                   checked: downloaderCfg.value.extra.notifyWhenNewVersion,
                   onChanged: (bool value) async {
-                    downloaderCfg.update((val) => val!.extra.notifyWhenNewVersion = value);
+                    downloaderCfg.update(
+                      (val) => val!.extra.notifyWhenNewVersion = value,
+                    );
                     await debounceSave();
                   },
                 ),
@@ -549,17 +676,24 @@ class SettingView extends GetView<SettingController> {
               title: 'appNameMod'.tr,
               subTitle: 'modDesc'.tr,
               trailing: const Icon(FluentIcons.open_16_regular, size: 16.0),
-              onPressed: () => launchUrl(Uri.parse(modRespository), mode: LaunchMode.externalApplication),
+              onPressed: () => launchUrl(
+                Uri.parse(modRespository),
+                mode: LaunchMode.externalApplication,
+              ),
             ),
             Obx(() {
               final hasNewVersion = controller.latestVersion.value != null;
               return hasNewVersion
                   ? _SettingItem(
-                      title: '${'appNameMod'.tr} ${'newVersionTitle'.trParams({'version': ''})}',
+                      title:
+                          '${'appNameMod'.tr} ${'newVersionTitle'.trParams({'version': ''})}',
                       subTitle: controller.latestVersion.value?.version ?? '',
                       trailing: FilledButton(
                         child: Text('view'.tr),
-                        onPressed: () => showUpdateDialog(context, controller.latestVersion.value!),
+                        onPressed: () => showUpdateDialog(
+                          context,
+                          controller.latestVersion.value!,
+                        ),
                       ),
                     )
                   : const SizedBox.shrink();
@@ -568,17 +702,26 @@ class SettingView extends GetView<SettingController> {
               title: 'homepage'.tr,
               subTitle: homePage,
               trailing: const Icon(FluentIcons.open_16_regular, size: 16.0),
-              onPressed: () => launchUrl(Uri.parse(homePage), mode: LaunchMode.externalApplication),
+              onPressed: () => launchUrl(
+                Uri.parse(homePage),
+                mode: LaunchMode.externalApplication,
+              ),
             ),
             _SettingItem(
               title: 'thanks'.tr,
               subTitle: 'thanksDesc'.tr,
               trailing: const Icon(FluentIcons.open_16_regular, size: 16.0),
-              onPressed: () => launchUrl(Uri.parse(thankPage), mode: LaunchMode.externalApplication),
+              onPressed: () => launchUrl(
+                Uri.parse(thankPage),
+                mode: LaunchMode.externalApplication,
+              ),
             ),
             const SizedBox(height: 20),
             const AppLogo(),
-            Text('appName'.tr, style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold)),
+            Text(
+              'appName'.tr,
+              style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 5),
             Text('Version: ${packageInfo.version}'),
             Text('© ${DateTime.now().year} monkeyWie'),
@@ -596,7 +739,8 @@ class SettingView extends GetView<SettingController> {
         () => Text(switch (downloaderCfg.value.proxy.proxyMode) {
           ProxyModeEnum.noProxy => 'noProxy'.tr,
           ProxyModeEnum.systemProxy => 'systemProxy'.tr,
-          ProxyModeEnum.customProxy => '${downloaderCfg.value.proxy.scheme}://${downloaderCfg.value.proxy.host}',
+          ProxyModeEnum.customProxy =>
+            '${downloaderCfg.value.proxy.scheme}://${downloaderCfg.value.proxy.host}',
         }),
       ),
       keyBuilder: (Key key) {
@@ -607,16 +751,28 @@ class SettingView extends GetView<SettingController> {
               isExpanded: true,
               value: downloaderCfg.value.proxy.proxyMode,
               onChanged: (value) async {
-                if (value != null && value != downloaderCfg.value.proxy.proxyMode) {
+                if (value != null &&
+                    value != downloaderCfg.value.proxy.proxyMode) {
                   downloaderCfg.value.proxy.proxyMode = value;
-                  downloaderCfg.update((val) => val!.proxy = downloaderCfg.value.proxy);
+                  downloaderCfg.update(
+                    (val) => val!.proxy = downloaderCfg.value.proxy,
+                  );
                   await debounceSave();
                 }
               },
               items: [
-                ComboBoxItem<ProxyModeEnum>(value: ProxyModeEnum.noProxy, child: Text('noProxy'.tr)),
-                ComboBoxItem<ProxyModeEnum>(value: ProxyModeEnum.systemProxy, child: Text('systemProxy'.tr)),
-                ComboBoxItem<ProxyModeEnum>(value: ProxyModeEnum.customProxy, child: Text('customProxy'.tr)),
+                ComboBoxItem<ProxyModeEnum>(
+                  value: ProxyModeEnum.noProxy,
+                  child: Text('noProxy'.tr),
+                ),
+                ComboBoxItem<ProxyModeEnum>(
+                  value: ProxyModeEnum.systemProxy,
+                  child: Text('systemProxy'.tr),
+                ),
+                ComboBoxItem<ProxyModeEnum>(
+                  value: ProxyModeEnum.customProxy,
+                  child: Text('customProxy'.tr),
+                ),
               ],
             ),
           ),
@@ -629,7 +785,8 @@ class SettingView extends GetView<SettingController> {
               isExpanded: true,
               value: downloaderCfg.value.proxy.scheme,
               onChanged: (value) async {
-                if (value != null && value != downloaderCfg.value.proxy.scheme) {
+                if (value != null &&
+                    value != downloaderCfg.value.proxy.scheme) {
                   downloaderCfg.update((val) => val!.proxy.scheme = value);
                   await debounceSave();
                 }
@@ -690,8 +847,21 @@ class SettingView extends GetView<SettingController> {
           ],
         );
 
-        final usrController = TextEditingController(text: downloaderCfg.value.proxy.usr);
-        final pwdController = TextEditingController(text: downloaderCfg.value.proxy.pwd);
+        final usrController = TextEditingController(text: proxy.usr);
+        final pwdController = TextEditingController(text: proxy.pwd);
+
+        updateAuth() async {
+          if (usrController.text != proxy.usr ||
+              pwdController.text != proxy.pwd) {
+            proxy.usr = usrController.text;
+            proxy.pwd = pwdController.text;
+
+            await debounceSave();
+          }
+        }
+
+        usrController.addListener(updateAuth);
+        pwdController.addListener(updateAuth);
 
         final auth = Row(
           spacing: 10,
@@ -707,18 +877,24 @@ class SettingView extends GetView<SettingController> {
                 label: 'password'.tr,
                 child: TextBox(controller: pwdController),
               ),
+              obscureText: true,
             ),
           ],
         );
 
         List<Widget> customView() {
-          if (downloaderCfg.value.proxy.proxyMode != ProxyModeEnum.customProxy) return [];
+          if (downloaderCfg.value.proxy.proxyMode != ProxyModeEnum.customProxy)
+            return [];
           return [scheme, server, auth];
         }
 
         return Obx(
           () => Form(
-            child: Column(spacing: 12, crossAxisAlignment: CrossAxisAlignment.start, children: [mode, ...customView()]),
+            child: Column(
+              spacing: 12,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [mode, ...customView()],
+            ),
           ),
         );
       },
@@ -728,7 +904,13 @@ class SettingView extends GetView<SettingController> {
     final buildApiProtocol = _buildConfigItem(
       FluentIcons.router_24_regular,
       'protocol',
-      subWidget: Obx(() => Text(startCfg.value.network == 'tcp' ? 'TCP ${startCfg.value.address}' : 'Unix')),
+      subWidget: Obx(
+        () => Text(
+          startCfg.value.network == 'tcp'
+              ? 'TCP ${startCfg.value.address}'
+              : 'Unix',
+        ),
+      ),
       keyBuilder: (Key key) {
         final items = <Widget>[
           Obx(
@@ -745,14 +927,20 @@ class SettingView extends GetView<SettingController> {
                     : null,
                 items: [
                   const ComboBoxItem<String>(value: 'tcp', child: Text('TCP')),
-                  Util.supportUnixSocket() ? const ComboBoxItem<String>(value: 'unix', child: Text('Unix')) : null,
+                  Util.supportUnixSocket()
+                      ? const ComboBoxItem<String>(
+                          value: 'unix',
+                          child: Text('Unix'),
+                        )
+                      : null,
                 ].whereType<ComboBoxItem<String>>().toList(),
               ),
             ),
           ),
         ];
 
-        if ((Util.isDesktop() || Util.isAndroid()) && startCfg.value.network == 'tcp') {
+        if ((Util.isDesktop() || Util.isAndroid()) &&
+            startCfg.value.network == 'tcp') {
           final arr = startCfg.value.address.split(':');
           var ip = '127.0.0.1';
           var port = '0';
@@ -764,7 +952,8 @@ class SettingView extends GetView<SettingController> {
           final ipController = TextEditingController(text: ip);
           final portController = TextEditingController(text: port);
           updateAddress() async {
-            if (ipController.text.isEmpty || portController.text.isEmpty) return;
+            if (ipController.text.isEmpty || portController.text.isEmpty)
+              return;
 
             final newAddress = '${ipController.text}:${portController.text}';
             if (newAddress != startCfg.value.address) {
@@ -777,9 +966,15 @@ class SettingView extends GetView<SettingController> {
                   final configPort = int.parse(portController.text);
                   if (configPort == 0) return '';
                   try {
-                    final socket = await Socket.connect(configIp, configPort, timeout: const Duration(seconds: 3));
+                    final socket = await Socket.connect(
+                      configIp,
+                      configPort,
+                      timeout: const Duration(seconds: 3),
+                    );
                     socket.close();
-                    return 'portInUse'.trParams({'port': configPort.toString()});
+                    return 'portInUse'.trParams({
+                      'port': configPort.toString(),
+                    });
                   } catch (e) {
                     return '';
                   }
@@ -788,7 +983,8 @@ class SettingView extends GetView<SettingController> {
               );
 
               if (!saved) {
-                final oldAddress = (await appController.loadStartConfig()).address;
+                final oldAddress =
+                    (await appController.loadStartConfig()).address;
                 startCfg.update((val) => val!.address = oldAddress);
               }
             }
@@ -804,7 +1000,9 @@ class SettingView extends GetView<SettingController> {
                 child: TextBox(
                   controller: ipController,
                   keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp('[0-9.]'))],
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp('[0-9.]')),
+                  ],
                 ),
               ),
             ),
@@ -826,7 +1024,10 @@ class SettingView extends GetView<SettingController> {
         }
 
         return Form(
-          child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: items),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: items,
+          ),
         );
       },
     );
@@ -835,17 +1036,30 @@ class SettingView extends GetView<SettingController> {
         ? _buildConfigItem(
             FluentIcons.key_24_regular,
             'apiToken',
-            trailing: Obx(() => Text(startCfg.value.apiToken.isEmpty ? 'notSet'.tr : 'set'.tr)),
+            trailing: Obx(
+              () => Text(
+                startCfg.value.apiToken.isEmpty ? 'notSet'.tr : 'set'.tr,
+              ),
+            ),
             keyBuilder: (Key key) {
-              final apiTokenController = TextEditingController(text: startCfg.value.apiToken);
+              final apiTokenController = TextEditingController(
+                text: startCfg.value.apiToken,
+              );
               apiTokenController.addListener(() async {
                 if (apiTokenController.text != startCfg.value.apiToken) {
-                  startCfg.update((val) => val!.apiToken = apiTokenController.text);
+                  startCfg.update(
+                    (val) => val!.apiToken = apiTokenController.text,
+                  );
 
                   await debounceSave(needRestart: true);
                 }
               });
-              return TextBox(key: key, obscureText: true, controller: apiTokenController, focusNode: FocusNode());
+              return TextBox(
+                key: key,
+                obscureText: true,
+                controller: apiTokenController,
+                focusNode: FocusNode(),
+              );
             },
           )
         : () => null;
@@ -859,7 +1073,8 @@ class SettingView extends GetView<SettingController> {
         trailing: Util.isDesktop()
             ? const Icon(FluentIcons.open_folder_20_regular, size: 16.0)
             : CopyButton(logsDir(), size: 16),
-        onPressed: () => Util.isDesktop() ? launchUrl(Uri.file(logsDir())) : null,
+        onPressed: () =>
+            Util.isDesktop() ? launchUrl(Uri.file(logsDir())) : null,
       );
     }
 
@@ -879,7 +1094,11 @@ class SettingView extends GetView<SettingController> {
         ),
         _SettingSection(
           sectionTitle: 'HTTP',
-          children: [buildHttpUa(), buildHttpConnections(), buildHttpUseServerCtime()],
+          children: [
+            buildHttpUa(),
+            buildHttpConnections(),
+            buildHttpUseServerCtime(),
+          ],
         ),
         _SettingSection(
           sectionTitle: 'BitTorrent',
@@ -891,10 +1110,19 @@ class SettingView extends GetView<SettingController> {
             ?buildBtDefaultClientConfig(),
           ],
         ),
-        _SettingSection(sectionTitle: 'ui'.tr, children: [buildTheme(), buildLocale()]),
+        _SettingSection(
+          sectionTitle: 'ui'.tr,
+          children: [buildTheme(), buildLocale()],
+        ),
         _SettingSection(sectionTitle: 'network'.tr, children: [buildProxy()]),
-        _SettingSection(sectionTitle: 'API', children: [buildApiProtocol(), ?buildApiToken()]),
-        _SettingSection(sectionTitle: 'developer'.tr, children: [buildLogsDir()]),
+        _SettingSection(
+          sectionTitle: 'API',
+          children: [buildApiProtocol(), ?buildApiToken()],
+        ),
+        _SettingSection(
+          sectionTitle: 'developer'.tr,
+          children: [buildLogsDir()],
+        ),
         _SettingSection(sectionTitle: 'about'.tr, children: [buildAbout()]),
       ],
     );
@@ -958,7 +1186,10 @@ class SettingView extends GetView<SettingController> {
           _tapInputWidget(inputKey, value);
         });
       },
-      content: Container(padding: const EdgeInsets.all(8), child: keyBuilder(inputKey)),
+      content: Container(
+        padding: const EdgeInsets.all(8),
+        child: keyBuilder(inputKey),
+      ),
     );
   }
 
@@ -987,14 +1218,24 @@ class _SettingSection extends StatelessWidget {
     return InfoLabel(
       label: sectionTitle,
       labelStyle: theme.typography.bodyStrong,
-      child: Column(spacing: 4, crossAxisAlignment: CrossAxisAlignment.start, children: children),
+      child: Column(
+        spacing: 4,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
     );
   }
 }
 
 ///SettingItem
 class _SettingItem extends StatelessWidget {
-  const _SettingItem({this.icon, required this.title, this.subTitle, required this.trailing, this.onPressed});
+  const _SettingItem({
+    this.icon,
+    required this.title,
+    this.subTitle,
+    required this.trailing,
+    this.onPressed,
+  });
 
   final IconData? icon;
   final String title;
@@ -1008,22 +1249,33 @@ class _SettingItem extends StatelessWidget {
       onPressed: onPressed,
       leading: Padding(
         padding: const EdgeInsets.only(right: 6.0),
-        child: icon != null ? Icon(icon, size: 24.0) : const SizedBox(width: 24.0),
+        child: icon != null
+            ? Icon(icon, size: 24.0)
+            : const SizedBox(width: 24.0),
       ),
       title: subTitle == null
-          ? Container(padding: const EdgeInsets.symmetric(vertical: 24), child: Text(title))
+          ? Container(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Text(title),
+            )
           : Container(
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title),
-                  Text(subTitle!, style: FluentTheme.of(context).typography.caption),
+                  Text(
+                    subTitle!,
+                    style: FluentTheme.of(context).typography.caption,
+                  ),
                 ],
               ),
             ),
       backgroundColor: getCardBackgroundColor(FluentTheme.of(context)),
-      trailing: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 150), child: trailing),
+      trailing: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 150),
+        child: trailing,
+      ),
     );
   }
 }
@@ -1057,10 +1309,17 @@ class _SettingExpanderItem extends StatelessWidget {
           ? const SizedBox.shrink()
           : Padding(
               padding: const EdgeInsets.only(right: 6.0),
-              child: SizedBox(height: 24, width: 24, child: iconWidget ?? Icon(icon, size: 24.0)),
+              child: SizedBox(
+                height: 24,
+                width: 24,
+                child: iconWidget ?? Icon(icon, size: 24.0),
+              ),
             ),
       header: subTitle == null && subWidget == null
-          ? Container(padding: const EdgeInsets.symmetric(vertical: 24), child: Text(title))
+          ? Container(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Text(title),
+            )
           : Container(
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Column(
@@ -1068,14 +1327,19 @@ class _SettingExpanderItem extends StatelessWidget {
                 children: [
                   Text(title),
                   DefaultTextStyle(
-                    style: FluentTheme.of(context).typography.caption ?? const TextStyle(),
+                    style:
+                        FluentTheme.of(context).typography.caption ??
+                        const TextStyle(),
                     child: subWidget ?? Text(subTitle!),
                   ),
                 ],
               ),
             ),
       trailing: trailing != null
-          ? ConstrainedBox(constraints: const BoxConstraints(maxWidth: 150), child: trailing)
+          ? ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 150),
+              child: trailing,
+            )
           : null,
       contentPadding: EdgeInsets.zero,
       onStateChanged: onStateChanged,
@@ -1086,7 +1350,11 @@ class _SettingExpanderItem extends StatelessWidget {
 
 /// Used for items within expandable setting sections
 class _SettingSubItem extends StatelessWidget {
-  const _SettingSubItem({required this.title, required this.trailing, this.onPressed});
+  const _SettingSubItem({
+    required this.title,
+    required this.trailing,
+    this.onPressed,
+  });
 
   final String title;
   final Widget? trailing;
@@ -1098,13 +1366,18 @@ class _SettingSubItem extends StatelessWidget {
     return UniversalListItem(
       onPressed: onPressed,
       leading: const SizedBox(width: 30),
-      title: Padding(padding: const EdgeInsets.symmetric(vertical: 12.0), child: Text(title)),
+      title: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12.0),
+        child: Text(title),
+      ),
       shape: RoundedRectangleBorder(
         side: BorderSide(color: theme.resources.cardStrokeColorDefault),
         borderRadius: BorderRadius.circular(2.0),
       ),
       backgroundColor: getCardBackgroundColor(theme),
-      trailing: trailing != null ? Padding(padding: const EdgeInsets.only(right: 24), child: trailing) : null,
+      trailing: trailing != null
+          ? Padding(padding: const EdgeInsets.only(right: 24), child: trailing)
+          : null,
     );
   }
 }
@@ -1115,7 +1388,12 @@ class _TextIconButton extends StatelessWidget {
   final IconData icon;
   final void Function() onTap;
 
-  const _TextIconButton({required this.label, this.tooltip, required this.icon, required this.onTap});
+  const _TextIconButton({
+    required this.label,
+    this.tooltip,
+    required this.icon,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1133,17 +1411,26 @@ class _TextIconButton extends StatelessWidget {
               Flexible(
                 child: Card(
                   backgroundColor: theme.accentColor,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
                   child: Text(
                     label,
                     style: TextStyle(
-                      color: theme.brightness == Brightness.light ? Colors.white : const Color(0xE4000000),
+                      color: theme.brightness == Brightness.light
+                          ? Colors.white
+                          : const Color(0xE4000000),
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 12),
-              Icon(icon, color: theme.typography.body?.color, size: theme.typography.body?.fontSize),
+              Icon(
+                icon,
+                color: theme.typography.body?.color,
+                size: theme.typography.body?.fontSize,
+              ),
             ],
           ),
         ),
