@@ -9,16 +9,23 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:gopeed/app/views/app_logo.dart';
 import 'package:gopeed/app/views/copy_button.dart';
+import 'package:gopeed/app/views/directory_selector.dart';
+import 'package:gopeed/app/views/filled_button_loading.dart';
 import 'package:gopeed/app/views/fluent/base_pane_body.dart';
 import 'package:gopeed/app/views/fluent/universal_list_item.dart';
+import 'package:gopeed/app/views/icon_button_loading.dart';
 import 'package:gopeed/app/views/icon_label.dart';
 import 'package:gopeed/theme/theme.dart';
 import 'package:intl/intl.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:window_manager/window_manager.dart';
 
+import '../../../../api/api.dart' as api;
 import '../../../../api/model/downloader_config.dart';
+import '../../../../database/database.dart';
 import '../../../../i18n/message.dart';
+import '../../../../util/analytics.dart';
 import '../../../../util/input_formatter.dart';
 import '../../../../util/locale_manager.dart';
 import '../../../../util/log_util.dart';
@@ -38,11 +45,20 @@ const thankPage = 'https://github.com/GopeedLab/gopeed/graphs/contributors';
 class SettingView extends GetView<SettingController> {
   const SettingView({Key? key}) : super(key: key);
 
+  // Helper function to get display name for a category
+  static String _getCategoryDisplayName(DownloadCategory category) {
+    if (category.nameKey != null && category.nameKey!.isNotEmpty) {
+      return category.nameKey!.tr;
+    }
+    return category.name;
+  }
+
   @override
   Widget build(BuildContext context) {
     final appController = Get.find<AppController>();
     final downloaderCfg = appController.downloaderConfig;
     final startCfg = appController.startConfig;
+    final theme = FluentTheme.of(context);
 
     Timer? timer;
     Future<bool> debounceSave({Future<String> Function()? check, bool needRestart = false}) {
@@ -66,26 +82,125 @@ class SettingView extends GetView<SettingController> {
     }
 
     // download basic config items start
-    Widget buildDownloadDir() {
-      return _SettingItem(
-        icon: FluentIcons.folder_24_regular,
-        title: 'downloadDir'.tr,
-        trailing: Obx(
-          () => _TextIconButton(
-            label: downloaderCfg.value.downloadDir.getSuffix,
-            tooltip: downloaderCfg.value.downloadDir,
-            icon: FluentIcons.edit_20_regular,
-            onTap: () async {
-              final dir = await FilePicker.platform.getDirectoryPath();
-              if (dir != null && dir != downloaderCfg.value.downloadDir) {
-                downloaderCfg.update((val) => val!.downloadDir = dir);
-                await debounceSave();
-              }
-            },
-          ),
-        ),
-      );
-    }
+    final buildDownloadDir = _buildConfigItem(
+      FluentIcons.folder_24_regular,
+      'downloadDir',
+      subWidget: Obx(() => Text(downloaderCfg.value.downloadDir)),
+      trailing: Obx(() {
+        final categories = downloaderCfg.value.extra.downloadCategories
+            .where((c) => !c.isDeleted) // Filter out deleted categories
+            .toList();
+        return Text('categoriesCount'.trParams({'count': categories.length.toString()}));
+      }),
+      keyBuilder: (Key key) {
+        final downloadDirController = TextEditingController(text: downloaderCfg.value.downloadDir);
+        // Update config only when editing is done (on focus lost or submit)
+        void onEditComplete() {
+          if (downloadDirController.text != downloaderCfg.value.downloadDir) {
+            downloaderCfg.update((val) {
+              val!.downloadDir = downloadDirController.text;
+            });
+            debounceSave();
+          }
+        }
+
+        return Obx(() {
+          final categories = downloaderCfg.value.extra.downloadCategories
+              .where((c) => !c.isDeleted) // Filter out deleted categories
+              .toList();
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            child: Column(
+              spacing: 8,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('downloadDir'.tr, style: theme.typography.bodyStrong),
+                DirectorySelector(
+                  controller: downloadDirController,
+                  showLabel: false,
+                  showAndoirdToggle: true,
+                  allowEdit: true,
+                  showPlaceholderButton: true,
+                  onEditComplete: onEditComplete,
+                ),
+                // Download categories configuration
+                Text('downloadCategories'.tr, style: theme.typography.bodyStrong),
+                Column(
+                  spacing: 2,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: categories.map((category) {
+                    return ListTile(
+                      onPressed: () {},
+                      title: Text(_getCategoryDisplayName(category)),
+                      subtitle: Text(category.path, overflow: TextOverflow.ellipsis),
+                      trailing: Row(
+                        spacing: 8,
+                        children: [
+                          IconButton(
+                            icon: const Icon(FluentIcons.edit_20_regular, size: 20.0),
+                            onPressed: () {
+                              _showCategoryDialog(context, debounceSave, downloaderCfg, category: category);
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(FluentIcons.delete_20_regular, size: 20.0),
+                            onPressed: () async {
+                              // Show confirmation dialog
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (context) => ContentDialog(
+                                  title: Text('tip'.tr),
+                                  content: Text('confirmDelete'.tr),
+                                  actions: [
+                                    FilledButton(
+                                      onPressed: () => Navigator.of(context).pop(true),
+                                      child: Text('confirm'.tr),
+                                    ),
+                                    Button(onPressed: () => Navigator.of(context).pop(false), child: Text('cancel'.tr)),
+                                  ],
+                                ),
+                              );
+
+                              if (confirmed == true) {
+                                if (category.isBuiltIn) {
+                                  // Mark built-in category as deleted instead of removing it
+                                  downloaderCfg.update((val) {
+                                    category.isDeleted = true;
+                                  });
+                                } else {
+                                  // Remove custom categories completely
+                                  downloaderCfg.update((val) {
+                                    val!.extra.downloadCategories = val.extra.downloadCategories
+                                        .where((c) => c != category)
+                                        .toList();
+                                  });
+                                }
+                                debounceSave();
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+                // Add button
+                FilledButton(
+                  onPressed: () {
+                    _showCategoryDialog(context, debounceSave, downloaderCfg);
+                  },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 8,
+                    children: [const Icon(FluentIcons.add_20_regular, size: 20.0), Text('add'.tr)],
+                  ),
+                ),
+              ],
+            ),
+          );
+        });
+      },
+    );
 
     final buildMaxRunning = _buildConfigItem(
       FluentIcons.arrow_download_24_regular,
@@ -122,6 +237,89 @@ class SettingView extends GetView<SettingController> {
             checked: downloaderCfg.value.extra.defaultDirectDownload,
             onChanged: (bool value) async {
               downloaderCfg.update((val) => val!.extra.defaultDirectDownload = value);
+              await debounceSave();
+            },
+          ),
+        ),
+      );
+    }
+
+    Widget buildAutoStartTasks() {
+      return _SettingItem(
+        icon: FluentIcons.play_24_regular,
+        title: 'autoStartTasks'.tr,
+        trailing: Obx(
+          () => ToggleSwitch(
+            content: Text(appController.downloaderConfig.value.extra.autoStartTasks ? 'on'.tr : 'off'.tr),
+            leadingContent: true,
+            checked: appController.downloaderConfig.value.extra.autoStartTasks,
+            onChanged: (bool value) async {
+              appController.downloaderConfig.update((val) {
+                val!.extra.autoStartTasks = value;
+              });
+              await debounceSave();
+            },
+          ),
+        ),
+      );
+    }
+
+    // AutoTorrent: Enable auto create BT tasks from .torrent files
+    Widget buildAutoTorrentEnable() {
+      return _SettingItem(
+        icon: FluentIcons.clipboard_task_24_regular,
+        title: 'autoTorrentEnable'.tr,
+        trailing: Obx(
+          () => ToggleSwitch(
+            content: Text(appController.downloaderConfig.value.autoTorrent.enable ? 'on'.tr : 'off'.tr),
+            leadingContent: true,
+            checked: appController.downloaderConfig.value.autoTorrent.enable,
+            onChanged: (bool value) async {
+              appController.downloaderConfig.update((val) {
+                val!.autoTorrent.enable = value;
+              });
+              await debounceSave();
+            },
+          ),
+        ),
+      );
+    }
+
+    // AutoTorrent: Delete .torrent file after BT task creation
+    Widget buildAutoTorrentDeleteAfterDownload() {
+      return _SettingItem(
+        icon: FluentIcons.delete_24_regular,
+        title: 'autoTorrentDeleteAfterDownload'.tr,
+        trailing: Obx(
+          () => ToggleSwitch(
+            content: Text(appController.downloaderConfig.value.autoTorrent.deleteAfterDownload ? 'on'.tr : 'off'.tr),
+            leadingContent: true,
+            checked: appController.downloaderConfig.value.autoTorrent.deleteAfterDownload,
+            onChanged: (bool value) async {
+              appController.downloaderConfig.update((val) {
+                val!.autoTorrent.deleteAfterDownload = value;
+              });
+              await debounceSave();
+            },
+          ),
+        ),
+      );
+    }
+
+    // New: Auto Delete Missing File Tasks
+    Widget buildAutoDeleteMissingFileTasks() {
+      return _SettingItem(
+        icon: FluentIcons.delete_24_regular,
+        title: 'autoDeleteMissingFileTasks'.tr,
+        trailing: Obx(
+          () => ToggleSwitch(
+            content: Text(appController.downloaderConfig.value.autoDeleteMissingFileTasks ? 'on'.tr : 'off'.tr),
+            leadingContent: true,
+            checked: appController.downloaderConfig.value.autoDeleteMissingFileTasks,
+            onChanged: (bool value) async {
+              appController.downloaderConfig.update((val) {
+                val!.autoDeleteMissingFileTasks = value;
+              });
               await debounceSave();
             },
           ),
@@ -172,6 +370,80 @@ class SettingView extends GetView<SettingController> {
                 if (context.mounted) showErrorMessage(context, e);
                 logger.e('launchAtStartup fail', e);
               }
+            },
+          ),
+        ),
+      );
+    }
+
+    // Menubar mode only for macOS
+    final runAsMenubarApp = Database.instance.getRunAsMenubarApp().obs;
+    Widget? buildMenubarMode() {
+      if (!Util.isMacos()) return null;
+      return _SettingItem(
+        icon: FluentIcons.grid_24_regular,
+        title: 'runAsMenubarApp'.tr,
+        subTitle: 'runAsMenubarAppDesc'.tr,
+        trailing: Obx(
+          () => ToggleSwitch(
+            content: Text(runAsMenubarApp.value ? 'on'.tr : 'off'.tr),
+            leadingContent: true,
+            checked: runAsMenubarApp.value,
+            onChanged: (bool value) async {
+              runAsMenubarApp.value = value;
+              // Save to database (single source of truth)
+              Database.instance.saveRunAsMenubarApp(value);
+              // Apply dock icon visibility
+              await windowManager.setSkipTaskbar(value);
+              // Small delay to let macOS process the activation policy change
+              await Future.delayed(const Duration(milliseconds: 100));
+              // Ensure window stays visible after toggle
+              await windowManager.show();
+              await windowManager.focus();
+              // Force UI refresh
+              await debounceSave();
+            },
+          ),
+        ),
+      );
+    }
+
+    // Archive auto extract configuration
+    Widget buildAutoExtract() {
+      return _SettingItem(
+        icon: FluentIcons.folder_zip_24_regular,
+        title: 'autoExtract'.tr,
+        trailing: Obx(
+          () => ToggleSwitch(
+            content: Text(appController.downloaderConfig.value.archive.autoExtract ? 'on'.tr : 'off'.tr),
+            leadingContent: true,
+            checked: appController.downloaderConfig.value.archive.autoExtract,
+            onChanged: (bool value) async {
+              appController.downloaderConfig.update((val) {
+                val!.archive.autoExtract = value;
+              });
+              await debounceSave();
+            },
+          ),
+        ),
+      );
+    }
+
+    // Archive delete after extract configuration
+    Widget buildDeleteAfterExtract() {
+      return _SettingItem(
+        icon: FluentIcons.delete_24_regular,
+        title: 'deleteAfterExtract'.tr,
+        trailing: Obx(
+          () => ToggleSwitch(
+            content: Text(appController.downloaderConfig.value.archive.deleteAfterExtract ? 'on'.tr : 'off'.tr),
+            leadingContent: true,
+            checked: appController.downloaderConfig.value.archive.deleteAfterExtract,
+            onChanged: (bool value) async {
+              appController.downloaderConfig.update((val) {
+                val!.archive.deleteAfterExtract = value;
+              });
+              await debounceSave();
             },
           ),
         ),
@@ -510,6 +782,26 @@ class SettingView extends GetView<SettingController> {
       );
     }
 
+    final analyticsEnabled = Database.instance.getAnalyticsEnabled().obs;
+    Widget buildAnalyticsEnabled() {
+      return _SettingItem(
+        icon: FluentIcons.chart_multiple_24_regular,
+        title: 'analyticsEnabled'.tr,
+        subTitle: 'analyticsEnabledDesc'.tr,
+        trailing: Obx(
+          () => ToggleSwitch(
+            content: Text(analyticsEnabled.value ? 'on'.tr : 'off'.tr),
+            leadingContent: true,
+            checked: analyticsEnabled.value,
+            onChanged: (bool value) {
+              analyticsEnabled.value = value;
+              Database.instance.saveAnalyticsEnabled(value);
+            },
+          ),
+        ),
+      );
+    }
+
     // about config items start
     Widget buildAbout() {
       return _SettingExpanderItem(
@@ -695,6 +987,18 @@ class SettingView extends GetView<SettingController> {
         final usrController = TextEditingController(text: proxy.usr);
         final pwdController = TextEditingController(text: proxy.pwd);
 
+        updateAuth() async {
+          if (usrController.text != proxy.usr || pwdController.text != proxy.pwd) {
+            proxy.usr = usrController.text;
+            proxy.pwd = pwdController.text;
+
+            await debounceSave();
+          }
+        }
+
+        usrController.addListener(updateAuth);
+        pwdController.addListener(updateAuth);
+
         final auth = Row(
           spacing: 10,
           children: [
@@ -707,7 +1011,7 @@ class SettingView extends GetView<SettingController> {
             Flexible(
               child: InfoLabel(
                 label: 'password'.tr,
-                child: TextBox(controller: pwdController),
+                child: TextBox(controller: pwdController, obscureText: true),
               ),
             ),
           ],
@@ -721,6 +1025,120 @@ class SettingView extends GetView<SettingController> {
         return Obx(
           () => Form(
             child: Column(spacing: 12, crossAxisAlignment: CrossAxisAlignment.start, children: [mode, ...customView()]),
+          ),
+        );
+      },
+    );
+
+    // advanced config GitHub mirror items start
+    final buildGithubMirror = _buildConfigItem(
+      FluentIcons.cloud_link_24_regular,
+      'githubMirror',
+      subWidget: Text('githubMirrorDesc'.tr),
+      trailing: Obx(
+        () => ToggleSwitch(
+          content: Text(downloaderCfg.value.extra.githubMirror.enabled ? 'on'.tr : 'off'.tr),
+          leadingContent: true,
+          checked: downloaderCfg.value.extra.githubMirror.enabled,
+          onChanged: (bool value) {
+            downloaderCfg.update((val) {
+              val!.extra.githubMirror.enabled = value;
+            });
+            debounceSave();
+          },
+        ),
+      ),
+      keyBuilder: (Key key) {
+        return Obx(
+          () => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            child: Column(
+              spacing: 8,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // List of existing GitHub mirrors
+                ...downloaderCfg.value.extra.githubMirror.mirrors
+                    .where((m) => !m.isDeleted)
+                    .toList()
+                    .asMap()
+                    .entries
+                    .map((entry) {
+                      // Get the original index in the full list
+                      final mirror = entry.value;
+                      final index = downloaderCfg.value.extra.githubMirror.mirrors.indexOf(mirror);
+                      return Row(
+                        spacing: 8,
+                        children: [
+                          Expanded(child: Text(mirror.url, overflow: TextOverflow.ellipsis)),
+                          Tooltip(
+                            message: 'edit'.tr,
+                            child: IconButton(
+                              icon: const Icon(FluentIcons.edit_20_regular, size: 20.0),
+                              onPressed: () {
+                                _showGithubMirrorDialog(index: index, initialMirror: mirror);
+                              },
+                            ),
+                          ),
+                          Tooltip(
+                            message: 'delete'.tr,
+                            child: IconButton(
+                              icon: const Icon(FluentIcons.delete_20_regular, size: 20.0),
+                              onPressed: () async {
+                                // Show confirmation dialog
+                                final confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => ContentDialog(
+                                    title: Text('tip'.tr),
+                                    content: Text('confirmDelete'.tr),
+                                    actions: [
+                                      FilledButton(
+                                        onPressed: () => Navigator.of(context).pop(true),
+                                        child: Text('confirm'.tr),
+                                      ),
+                                      Button(
+                                        onPressed: () => Navigator.of(context).pop(false),
+                                        child: Text('cancel'.tr),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirmed != true) return;
+
+                                if (mirror.isBuiltIn) {
+                                  // Mark built-in mirror as deleted (logical delete)
+                                  downloaderCfg.update((val) {
+                                    mirror.isDeleted = true;
+                                  });
+                                } else {
+                                  // Remove custom mirrors completely (physical delete)
+                                  final mirrors = List<GithubMirror>.from(
+                                    downloaderCfg.value.extra.githubMirror.mirrors,
+                                  );
+                                  mirrors.removeAt(index);
+                                  downloaderCfg.update((val) {
+                                    val!.extra.githubMirror.mirrors = mirrors;
+                                  });
+                                }
+                                await debounceSave();
+                              },
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
+                // Add button
+                FilledButton(
+                  onPressed: () {
+                    _showGithubMirrorDialog();
+                  },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 8,
+                    children: [const Icon(FluentIcons.add_20_regular, size: 20.0), Text('add'.tr)],
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -833,24 +1251,180 @@ class SettingView extends GetView<SettingController> {
       },
     );
 
-    final buildApiToken = Util.isDesktop() && startCfg.value.network == 'tcp'
-        ? _buildConfigItem(
-            FluentIcons.key_24_regular,
-            'apiToken',
-            trailing: Obx(() => Text(startCfg.value.apiToken.isEmpty ? 'notSet'.tr : 'set'.tr)),
-            keyBuilder: (Key key) {
-              final apiTokenController = TextEditingController(text: startCfg.value.apiToken);
-              apiTokenController.addListener(() async {
-                if (apiTokenController.text != startCfg.value.apiToken) {
-                  startCfg.update((val) => val!.apiToken = apiTokenController.text);
+    final buildApiToken = _buildConfigItem(
+      FluentIcons.key_24_regular,
+      'apiToken',
+      trailing: Obx(() => Text(startCfg.value.apiToken.isEmpty ? 'notSet'.tr : 'set'.tr)),
+      keyBuilder: (Key key) {
+        final apiTokenController = TextEditingController(text: startCfg.value.apiToken);
+        apiTokenController.addListener(() async {
+          if (apiTokenController.text != startCfg.value.apiToken) {
+            startCfg.update((val) => val!.apiToken = apiTokenController.text);
 
-                  await debounceSave(needRestart: true);
-                }
-              });
-              return TextBox(key: key, obscureText: true, controller: apiTokenController, focusNode: FocusNode());
-            },
-          )
-        : () => null;
+            await debounceSave(needRestart: true);
+          }
+        });
+        return TextBox(key: key, obscureText: true, controller: apiTokenController, focusNode: FocusNode());
+      },
+    );
+
+    // advanced config webhook items
+    final buildWebhook = _buildConfigItem(
+      FluentIcons.alert_24_regular,
+      'webhook',
+      subWidget: Text('webhookDesc'.tr),
+      trailing: Obx(
+        () => ToggleSwitch(
+          content: Text(downloaderCfg.value.webhook.enable ? 'on'.tr : 'off'.tr),
+          leadingContent: true,
+          checked: downloaderCfg.value.webhook.enable,
+          onChanged: (bool value) {
+            downloaderCfg.update((val) {
+              val!.webhook.enable = value;
+            });
+            debounceSave();
+          },
+        ),
+      ),
+      keyBuilder: (Key key) {
+        return Obx(
+          () => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            child: Column(
+              spacing: 8,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // List of existing webhook URLs
+                ...downloaderCfg.value.webhook.urls.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final url = entry.value;
+                  return Row(
+                    spacing: 8,
+                    children: [
+                      Expanded(child: Text(url, overflow: TextOverflow.ellipsis)),
+                      Tooltip(
+                        message: 'edit'.tr,
+                        child: IconButton(
+                          icon: const Icon(FluentIcons.edit_20_regular, size: 20.0),
+                          onPressed: () {
+                            _showWebhookDialog(index: index, initialUrl: url);
+                          },
+                        ),
+                      ),
+                      Tooltip(
+                        message: 'delete'.tr,
+                        child: IconButton(
+                          icon: const Icon(FluentIcons.delete_20_regular, size: 20.0),
+                          onPressed: () async {
+                            // Create new list to avoid unmodifiable list error
+                            final urls = List<String>.from(downloaderCfg.value.webhook.urls);
+                            urls.removeAt(index);
+                            downloaderCfg.update((val) {
+                              val!.webhook.urls = urls;
+                            });
+                            await debounceSave();
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+                // Add button
+                FilledButton(
+                  onPressed: () {
+                    _showWebhookDialog();
+                  },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 8,
+                    children: [const Icon(FluentIcons.add_20_regular, size: 20.0), Text('add'.tr)],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    // advanced config script items
+    final buildScript = _buildConfigItem(
+      FluentIcons.script_24_regular,
+      'scriptDesc',
+      subWidget: Text('scriptDesc'.tr),
+      trailing: Obx(
+        () => ToggleSwitch(
+          content: Text(downloaderCfg.value.script.enable ? 'on'.tr : 'off'.tr),
+          leadingContent: true,
+          checked: downloaderCfg.value.script.enable,
+          onChanged: (bool value) {
+            downloaderCfg.update((val) {
+              val!.script.enable = value;
+            });
+            debounceSave();
+          },
+        ),
+      ),
+      keyBuilder: (Key key) {
+        return Obx(
+          () => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            child: Column(
+              spacing: 8,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // List of existing script paths
+                ...downloaderCfg.value.script.paths.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final path = entry.value;
+                  return Row(
+                    spacing: 8,
+                    children: [
+                      Expanded(child: Text(path, overflow: TextOverflow.ellipsis)),
+                      Tooltip(
+                        message: 'edit'.tr,
+                        child: IconButton(
+                          icon: const Icon(FluentIcons.edit_20_regular, size: 20.0),
+                          onPressed: () {
+                            _showScriptDialog(index: index, initialPath: path);
+                          },
+                        ),
+                      ),
+                      Tooltip(
+                        message: 'delete'.tr,
+                        child: IconButton(
+                          icon: const Icon(FluentIcons.delete_20_regular, size: 20.0),
+                          onPressed: () async {
+                            // Create new list to avoid unmodifiable list error
+                            final paths = List<String>.from(downloaderCfg.value.script.paths);
+                            paths.removeAt(index);
+                            downloaderCfg.update((val) {
+                              val!.script.paths = paths;
+                            });
+                            await debounceSave();
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+                // Add button
+                FilledButton(
+                  onPressed: () {
+                    _showScriptDialog();
+                  },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 8,
+                    children: [const Icon(FluentIcons.add_20_regular, size: 20.0), Text('add'.tr)],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
 
     // advanced config log items start
     Widget buildLogsDir() {
@@ -875,8 +1449,30 @@ class SettingView extends GetView<SettingController> {
             buildDownloadDir(),
             buildMaxRunning(),
             buildDefaultDirectDownload(),
+            buildAutoStartTasks(),
+            buildAutoTorrentEnable(),
+            Obx(
+              () => Visibility(
+                visible: appController.downloaderConfig.value.autoTorrent.enable,
+                child: buildAutoTorrentDeleteAfterDownload(),
+              ),
+            ),
+            buildAutoDeleteMissingFileTasks(),
             buildBrowserExtension(),
             ?buildAutoStartup(),
+            ?buildMenubarMode(),
+          ],
+        ),
+        _SettingSection(
+          sectionTitle: 'archives'.tr,
+          children: [
+            buildAutoExtract(),
+            Obx(
+              () => Visibility(
+                visible: appController.downloaderConfig.value.archive.autoExtract,
+                child: buildDeleteAfterExtract(),
+              ),
+            ),
           ],
         ),
         _SettingSection(
@@ -894,10 +1490,27 @@ class SettingView extends GetView<SettingController> {
           ],
         ),
         _SettingSection(sectionTitle: 'ui'.tr, children: [buildTheme(), buildLocale()]),
-        _SettingSection(sectionTitle: 'network'.tr, children: [buildProxy()]),
-        _SettingSection(sectionTitle: 'API', children: [buildApiProtocol(), ?buildApiToken()]),
-        _SettingSection(sectionTitle: 'developer'.tr, children: [buildLogsDir()]),
-        _SettingSection(sectionTitle: 'about'.tr, children: [buildAbout()]),
+        _SettingSection(sectionTitle: 'network'.tr, children: [buildProxy(), buildGithubMirror()]),
+        _SettingSection(
+          sectionTitle: 'API',
+          children: [
+            buildApiProtocol(),
+            Obx(
+              () => Visibility(
+                visible: Util.isDesktop() && appController.startConfig.value.network == 'tcp',
+                child: buildApiToken(),
+              ),
+            ),
+          ],
+        ),
+        _SettingSection(
+          sectionTitle: 'developer'.tr,
+          children: [buildWebhook(), if (Util.isDesktop()) buildScript(), buildLogsDir()],
+        ),
+        _SettingSection(
+          sectionTitle: 'about'.tr,
+          children: [if (Config.isConfigured) buildAnalyticsEnabled(), buildAbout()],
+        ),
       ],
     );
   }
@@ -973,6 +1586,400 @@ class SettingView extends GetView<SettingController> {
       default:
         return 'themeSystem'.tr;
     }
+  }
+
+  void _showCategoryDialog(
+    BuildContext context,
+    Future<bool> Function() debounceSave,
+    Rx<DownloaderConfig> downloaderCfg, {
+    DownloadCategory? category,
+  }) {
+    final isEdit = category != null;
+    final nameController = TextEditingController(text: isEdit ? _getCategoryDisplayName(category) : '');
+    final pathController = TextEditingController(text: category?.path ?? '');
+
+    showDialog(
+      context: context,
+      builder: (context) => ContentDialog(
+        title: Text(isEdit ? 'edit'.tr : 'add'.tr),
+        constraints: const BoxConstraints(maxWidth: 450.0, maxHeight: 756.0),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          spacing: 12,
+          children: [
+            InfoLabel(
+              label: 'categoryName'.tr,
+              child: TextBox(controller: nameController),
+            ),
+            DirectorySelector(
+              controller: pathController,
+              showLabel: true,
+              allowEdit: true,
+              showPlaceholderButton: true,
+            ),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () {
+              if (nameController.text.isEmpty || pathController.text.isEmpty) {
+                return;
+              }
+
+              if (isEdit) {
+                // Trigger UI update by wrapping changes in update()
+                downloaderCfg.update((val) {
+                  // If name changed, clear nameKey so it won't be re-translated
+                  final nameChanged = nameController.text != _getCategoryDisplayName(category);
+                  category.name = nameController.text;
+                  category.path = pathController.text;
+                  if (nameChanged) {
+                    category.nameKey = null;
+                  }
+                  // If editing a deleted built-in category, unmark it as deleted
+                  if (category.isBuiltIn && category.isDeleted) {
+                    category.isDeleted = false;
+                  }
+                });
+              } else {
+                downloaderCfg.update((val) {
+                  val!.extra.downloadCategories = [
+                    ...val.extra.downloadCategories,
+                    DownloadCategory(name: nameController.text, path: pathController.text),
+                  ];
+                });
+              }
+              debounceSave();
+              Navigator.of(context).pop();
+            },
+            child: Text('confirm'.tr),
+          ),
+          Button(onPressed: () => Navigator.of(context).pop(), child: Text('cancel'.tr)),
+        ],
+      ),
+    );
+  }
+
+  void _showGithubMirrorDialog({int? index, GithubMirror? initialMirror}) {
+    final isEdit = index != null;
+    GithubMirrorType selectedType = initialMirror?.type ?? GithubMirrorType.jsdelivr;
+    final urlController = TextEditingController(text: initialMirror?.url ?? '');
+    final saveController = FilledButtonLoadingController();
+    final appController = Get.find<AppController>();
+    final downloaderCfg = appController.downloaderConfig;
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: Get.context!,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) => ContentDialog(
+          constraints: const BoxConstraints(maxWidth: 500.0, maxHeight: 756.0),
+          title: Text(isEdit ? 'edit'.tr : 'add'.tr),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Form(
+                key: formKey,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 12,
+                  children: [
+                    InfoLabel(
+                      label: 'githubMirrorType'.tr,
+                      child: ComboBox<GithubMirrorType>(
+                        value: selectedType,
+                        items: GithubMirrorType.values
+                            .map((type) => ComboBoxItem<GithubMirrorType>(value: type, child: Text(type.name)))
+                            .toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() {
+                              selectedType = value;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                    Expanded(
+                      child: InfoLabel(
+                        label: 'githubMirrorUrl'.tr,
+                        child: TextFormBox(
+                          controller: urlController,
+                          placeholder: 'githubMirrorUrlHint'.tr,
+                          keyboardType: TextInputType.url,
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'required'.tr;
+                            }
+                            final url = value.trim().toLowerCase();
+                            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                              return 'urlInvalid'.tr;
+                            }
+                            try {
+                              Uri.parse(value.trim());
+                            } catch (e) {
+                              return 'urlInvalid'.tr;
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            FilledButtonLoading(
+              controller: saveController,
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) {
+                  return;
+                }
+                final url = urlController.text.trim();
+                if (url.isEmpty) return;
+
+                saveController.start();
+                try {
+                  // Create new list to avoid unmodifiable list error
+                  final mirrors = List<GithubMirror>.from(downloaderCfg.value.extra.githubMirror.mirrors);
+
+                  final newMirror = GithubMirror(type: selectedType, url: url);
+
+                  if (isEdit) {
+                    mirrors[index] = newMirror;
+                  } else {
+                    mirrors.add(newMirror);
+                  }
+
+                  downloaderCfg.update((val) {
+                    val!.extra.githubMirror.mirrors = mirrors;
+                  });
+                  await appController.saveConfig();
+                  if (dialogContext.mounted) {
+                    Navigator.of(dialogContext).pop();
+                  }
+                } catch (e) {
+                  if (context.mounted) showErrorMessage(context, e);
+                } finally {
+                  saveController.stop();
+                }
+              },
+              child: Text('confirm'.tr),
+            ),
+            Button(onPressed: () => Navigator.of(dialogContext).pop(), child: Text('cancel'.tr)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showWebhookDialog({int? index, String? initialUrl}) {
+    final urlController = TextEditingController(text: initialUrl ?? '');
+    final testController = IconButtonLoadingController();
+    final saveController = FilledButtonLoadingController();
+    final appController = Get.find<AppController>();
+    final downloaderCfg = appController.downloaderConfig;
+    final isEdit = index != null;
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: Get.context!,
+      builder: (dialogContext) => ContentDialog(
+        title: Text(isEdit ? 'edit'.tr : 'add'.tr),
+        constraints: const BoxConstraints(maxWidth: 450.0, maxHeight: 756.0),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 8,
+                children: [
+                  Expanded(
+                    child: TextFormBox(
+                      controller: urlController,
+                      placeholder: 'webhookUrlHint'.tr,
+                      keyboardType: TextInputType.url,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'required'.tr;
+                        }
+                        final url = value.trim().toLowerCase();
+                        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                          return 'urlInvalid'.tr;
+                        }
+                        try {
+                          Uri.parse(value.trim());
+                        } catch (e) {
+                          return 'urlInvalid'.tr;
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                  Tooltip(
+                    message: 'webhookTest'.tr,
+                    child: IconButtonLoading(
+                      controller: testController,
+                      onPressed: () async {
+                        if (!formKey.currentState!.validate()) {
+                          return;
+                        }
+                        final url = urlController.text.trim();
+                        if (url.isEmpty) return;
+                        testController.start();
+                        try {
+                          await api.testWebhook(url);
+                          if (dialogContext.mounted) showMessage(dialogContext, 'tip'.tr, 'webhookTestSuccess'.tr);
+                        } catch (e) {
+                          if (dialogContext.mounted) showErrorMessage(dialogContext, 'webhookTestFail'.tr);
+                        } finally {
+                          testController.stop();
+                        }
+                      },
+                      icon: const Icon(FluentIcons.plug_connected_20_regular, size: 20.0),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        actions: [
+          FilledButtonLoading(
+            controller: saveController,
+            onPressed: () async {
+              if (!formKey.currentState!.validate()) {
+                return;
+              }
+              final url = urlController.text.trim();
+              if (url.isEmpty) return;
+
+              saveController.start();
+              try {
+                // Create new list to avoid unmodifiable list error
+                final urls = List<String>.from(downloaderCfg.value.webhook.urls);
+                if (isEdit) {
+                  urls[index] = url;
+                } else {
+                  urls.add(url);
+                }
+                downloaderCfg.update((val) {
+                  val!.webhook.urls = urls;
+                });
+                await appController.saveConfig();
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
+                }
+              } catch (e) {
+                if (dialogContext.mounted) showErrorMessage(dialogContext, e);
+              } finally {
+                saveController.stop();
+              }
+            },
+            child: Text('confirm'.tr),
+          ),
+          Button(onPressed: () => Navigator.of(dialogContext).pop(), child: Text('cancel'.tr)),
+        ],
+      ),
+    );
+  }
+
+  void _showScriptDialog({int? index, String? initialPath}) {
+    final pathController = TextEditingController(text: initialPath ?? '');
+    final saveController = FilledButtonLoadingController();
+    final appController = Get.find<AppController>();
+    final downloaderCfg = appController.downloaderConfig;
+    final isEdit = index != null;
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: Get.context!,
+      builder: (dialogContext) => ContentDialog(
+        title: Text(isEdit ? 'edit'.tr : 'add'.tr),
+        constraints: const BoxConstraints(maxWidth: 450.0, maxHeight: 756.0),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 8,
+                children: [
+                  Expanded(
+                    child: TextFormBox(
+                      controller: pathController,
+                      placeholder: 'scriptPathHint'.tr,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'required'.tr;
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                  if (Util.isDesktop())
+                    IconButton(
+                      icon: const Icon(FluentIcons.folder_open_20_regular, size: 20.0),
+                      onPressed: () async {
+                        final result = await FilePicker.platform.pickFiles();
+                        if (result != null && result.files.isNotEmpty) {
+                          final filePath = result.files.first.path;
+                          if (filePath != null) {
+                            pathController.text = filePath;
+                          }
+                        }
+                      },
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          FilledButtonLoading(
+            controller: saveController,
+            onPressed: () async {
+              if (!formKey.currentState!.validate()) {
+                return;
+              }
+              final path = pathController.text.trim();
+              if (path.isEmpty) return;
+
+              saveController.start();
+              try {
+                // Create new list to avoid unmodifiable list error
+                final paths = List<String>.from(downloaderCfg.value.script.paths);
+                if (isEdit) {
+                  paths[index] = path;
+                } else {
+                  paths.add(path);
+                }
+                downloaderCfg.update((val) {
+                  val!.script.paths = paths;
+                });
+                await appController.saveConfig();
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
+                }
+              } catch (e) {
+                if (dialogContext.mounted) showErrorMessage(dialogContext, e);
+              } finally {
+                saveController.stop();
+              }
+            },
+            child: Text('confirm'.tr),
+          ),
+          Button(onPressed: () => Navigator.of(dialogContext).pop(), child: Text('cancel'.tr)),
+        ],
+      ),
+    );
   }
 }
 
@@ -1108,57 +2115,6 @@ class _SettingSubItem extends StatelessWidget {
       backgroundColor: getCardBackgroundColor(theme),
       trailing: trailing != null ? Padding(padding: const EdgeInsets.only(right: 24), child: trailing) : null,
     );
-  }
-}
-
-class _TextIconButton extends StatelessWidget {
-  final String label;
-  final String? tooltip;
-  final IconData icon;
-  final void Function() onTap;
-
-  const _TextIconButton({required this.label, this.tooltip, required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = FluentTheme.of(context);
-    return Tooltip(
-      message: tooltip,
-      child: HyperlinkButton(
-        style: ButtonStyle(padding: WidgetStateProperty.all(EdgeInsets.zero)),
-        onPressed: onTap,
-        child: Card(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Card(
-                  backgroundColor: theme.accentColor,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: theme.brightness == Brightness.light ? Colors.white : const Color(0xE4000000),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Icon(icon, color: theme.typography.body?.color, size: theme.typography.body?.fontSize),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-extension on String {
-  String get getSuffix {
-    final index = lastIndexOf(RegExp(r'[\\/]+'));
-    if (index == -1 || index == length - 1) return this;
-    return substring(index + 1);
   }
 }
 

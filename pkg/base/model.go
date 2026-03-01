@@ -2,13 +2,14 @@ package base
 
 import (
 	"fmt"
-	"github.com/GopeedLab/gopeed/pkg/util"
-	"github.com/mattn/go-ieproxy"
-	"golang.org/x/exp/slices"
 	"net/http"
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/GopeedLab/gopeed/pkg/util"
+	"github.com/mattn/go-ieproxy"
+	"golang.org/x/exp/slices"
 )
 
 // Request download request
@@ -77,7 +78,7 @@ func (r *Resource) Validate() error {
 	if r.Name == "" {
 		return fmt.Errorf("invalid resource name")
 	}
-	if r.Files == nil || len(r.Files) == 0 {
+	if len(r.Files) == 0 {
 		return fmt.Errorf("invalid resource files")
 	}
 	for _, file := range r.Files {
@@ -123,7 +124,7 @@ func (o *Options) InitSelectFiles(fileSize int) {
 	// if selectFiles is empty, select all files
 	if len(o.SelectFiles) == 0 {
 		o.SelectFiles = make([]int, fileSize)
-		for i := 0; i < fileSize; i++ {
+		for i := range fileSize {
 			o.SelectFiles[i] = i
 		}
 	}
@@ -148,7 +149,7 @@ func ParseReqExtra[E any](req *Request) error {
 	return nil
 }
 
-func ParseOptsExtra[E any](opts *Options) error {
+func ParseOptExtra[E any](opts *Options) error {
 	if opts.Extra == nil {
 		return nil
 	}
@@ -177,11 +178,16 @@ type CreateTaskBatchItem struct {
 type DownloaderStoreConfig struct {
 	FirstLoad bool `json:"-"` // FirstLoad is the flag that the config is first time init and not from store
 
-	DownloadDir    string                 `json:"downloadDir"`    // DownloadDir is the default directory to save the downloaded files
-	MaxRunning     int                    `json:"maxRunning"`     // MaxRunning is the max running download count
-	ProtocolConfig map[string]any         `json:"protocolConfig"` // ProtocolConfig is special config for each protocol
-	Extra          map[string]any         `json:"extra"`
-	Proxy          *DownloaderProxyConfig `json:"proxy"`
+	DownloadDir                string                 `json:"downloadDir"`    // DownloadDir is the default directory to save the downloaded files
+	MaxRunning                 int                    `json:"maxRunning"`     // MaxRunning is the max running download count
+	ProtocolConfig             map[string]any         `json:"protocolConfig"` // ProtocolConfig is special config for each protocol
+	Extra                      map[string]any         `json:"extra"`
+	Proxy                      *DownloaderProxyConfig `json:"proxy"`
+	Webhook                    *WebhookConfig         `json:"webhook"`                    // Webhook is the webhook configuration
+	Script                     *ScriptConfig          `json:"script"`                     // Script is the script execution configuration
+	AutoTorrent                *AutoTorrentConfig     `json:"autoTorrent"`                // AutoTorrent is the auto torrent task creation configuration
+	Archive                    *ArchiveConfig         `json:"archive"`                    // Archive is the archive extraction configuration
+	AutoDeleteMissingFileTasks bool                   `json:"autoDeleteMissingFileTasks"` // AutoDeleteMissingFileTasks enables automatic deletion of tasks with missing files
 }
 
 func (cfg *DownloaderStoreConfig) Init() *DownloaderStoreConfig {
@@ -193,6 +199,24 @@ func (cfg *DownloaderStoreConfig) Init() *DownloaderStoreConfig {
 	}
 	if cfg.Proxy == nil {
 		cfg.Proxy = &DownloaderProxyConfig{}
+	}
+	if cfg.Webhook == nil {
+		cfg.Webhook = &WebhookConfig{}
+	}
+	if cfg.Script == nil {
+		cfg.Script = &ScriptConfig{}
+	}
+	if cfg.AutoTorrent == nil {
+		cfg.AutoTorrent = &AutoTorrentConfig{
+			Enable:              false,
+			DeleteAfterDownload: false,
+		}
+	}
+	if cfg.Archive == nil {
+		cfg.Archive = &ArchiveConfig{
+			AutoExtract:        false,
+			DeleteAfterExtract: false,
+		}
 	}
 	return cfg
 }
@@ -216,7 +240,43 @@ func (cfg *DownloaderStoreConfig) Merge(beforeCfg *DownloaderStoreConfig) *Downl
 	if cfg.Proxy == nil {
 		cfg.Proxy = beforeCfg.Proxy
 	}
+	if cfg.Webhook == nil {
+		cfg.Webhook = beforeCfg.Webhook
+	}
+	if cfg.Script == nil {
+		cfg.Script = beforeCfg.Script
+	}
+	if cfg.AutoTorrent == nil {
+		cfg.AutoTorrent = beforeCfg.AutoTorrent
+	}
+	if cfg.Archive == nil {
+		cfg.Archive = beforeCfg.Archive
+	}
 	return cfg
+}
+
+// WebhookConfig is the webhook configuration
+type WebhookConfig struct {
+	Enable bool     `json:"enable"` // Enable is the flag to enable/disable webhooks
+	URLs   []string `json:"urls"`   // URLs is the list of webhook URLs
+}
+
+// ScriptConfig is the script execution configuration
+type ScriptConfig struct {
+	Enable bool     `json:"enable"` // Enable is the flag to enable/disable script execution
+	Paths  []string `json:"paths"`  // Paths is the list of script paths to execute
+}
+
+// AutoTorrentConfig is the auto torrent task creation configuration
+type AutoTorrentConfig struct {
+	Enable              bool `json:"enable"`              // Enable enables automatic BT task creation when downloading .torrent files
+	DeleteAfterDownload bool `json:"deleteAfterDownload"` // DeleteAfterDownload deletes the .torrent file after BT task creation
+}
+
+// ArchiveConfig is the archive extraction configuration
+type ArchiveConfig struct {
+	AutoExtract        bool `json:"autoExtract"`        // AutoExtract enables automatic extraction of archives after download
+	DeleteAfterExtract bool `json:"deleteAfterExtract"` // DeleteAfterExtract deletes the archive after successful extraction
 }
 
 type DownloaderProxyConfig struct {

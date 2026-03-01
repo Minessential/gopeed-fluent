@@ -6,10 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/GopeedLab/gopeed/internal/test"
-	"github.com/GopeedLab/gopeed/pkg/base"
-	"github.com/GopeedLab/gopeed/pkg/download"
-	"github.com/GopeedLab/gopeed/pkg/rest/model"
 	"io"
 	"net"
 	"net/http"
@@ -20,6 +16,11 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/GopeedLab/gopeed/internal/test"
+	"github.com/GopeedLab/gopeed/pkg/base"
+	"github.com/GopeedLab/gopeed/pkg/download"
+	"github.com/GopeedLab/gopeed/pkg/rest/model"
 )
 
 var (
@@ -52,13 +53,13 @@ var (
 			"connections": 2,
 		},
 	}
-	createReq = &model.CreateTask{
-		Req: taskReq,
-		Opt: createOpts,
+	resolveReq = &model.ResolveTask{
+		Req:  taskReq,
+		Opts: createOpts,
 	}
-	createResoledReq = &model.CreateTask{
-		Req: taskReq,
-		Opt: createOpts,
+	createReq = &model.CreateTask{
+		Req:  taskReq,
+		Opts: createOpts,
 	}
 	installExtensionReq = &model.InstallExtension{
 		URL: "https://github.com/GopeedLab/gopeed-extension-samples#github-contributor-avatars-sample",
@@ -79,7 +80,7 @@ func TestInfo(t *testing.T) {
 
 func TestResolve(t *testing.T) {
 	doTest(func() {
-		resp := httpRequestCheckOk[*download.ResolveResult](http.MethodPost, "/api/v1/resolve", taskReq)
+		resp := httpRequestCheckOk[*download.ResolveResult](http.MethodPost, "/api/v1/resolve", resolveReq)
 		if !test.AssertResourceEqual(taskRes, resp.Res) {
 			t.Errorf("Resolve() got = %v, want %v", test.ToJson(resp.Res), test.ToJson(taskRes))
 		}
@@ -88,7 +89,7 @@ func TestResolve(t *testing.T) {
 
 func TestCreateTask(t *testing.T) {
 	doTest(func() {
-		resp := httpRequestCheckOk[*download.ResolveResult](http.MethodPost, "/api/v1/resolve", taskReq)
+		resp := httpRequestCheckOk[*download.ResolveResult](http.MethodPost, "/api/v1/resolve", resolveReq)
 
 		var wg sync.WaitGroup
 		wg.Add(1)
@@ -100,7 +101,6 @@ func TestCreateTask(t *testing.T) {
 
 		taskId := httpRequestCheckOk[string](http.MethodPost, "/api/v1/tasks", &model.CreateTask{
 			Rid: resp.ID,
-			Opt: createOpts,
 		})
 		if taskId == "" {
 			t.Fatal("create task failed")
@@ -195,30 +195,6 @@ func TestCreateDirectTaskBatchWithOpt(t *testing.T) {
 	})
 }
 
-func TestCreateDirectTaskWithResoled(t *testing.T) {
-	doTest(func() {
-		var wg sync.WaitGroup
-		wg.Add(1)
-		Downloader.Listener(func(event *download.Event) {
-			if event.Key == download.EventKeyFinally {
-				wg.Done()
-			}
-		})
-
-		taskId := httpRequestCheckOk[string](http.MethodPost, "/api/v1/tasks", createResoledReq)
-		if taskId == "" {
-			t.Fatal("create task failed")
-		}
-
-		wg.Wait()
-		want := test.FileMd5(test.BuildFile)
-		got := test.FileMd5(test.DownloadFile)
-		if want != got {
-			t.Errorf("CreateDirectTaskWithResoled() got = %v, want %v", got, want)
-		}
-	})
-}
-
 func TestPauseAndContinueTask(t *testing.T) {
 	doTest(func() {
 		var wg sync.WaitGroup
@@ -240,6 +216,7 @@ func TestPauseAndContinueTask(t *testing.T) {
 		if t2.Status != base.DownloadStatusPause {
 			t.Errorf("PauseTask() got = %v, want %v", t2.Status, base.DownloadStatusPause)
 		}
+		time.Sleep(time.Millisecond * 100)
 		httpRequestCheckOk[any](http.MethodPut, "/api/v1/tasks/"+taskId+"/continue", nil)
 		t3 := httpRequestCheckOk[*download.Task](http.MethodGet, "/api/v1/tasks/"+taskId, nil)
 		if t3.Status != base.DownloadStatusRunning {
@@ -255,6 +232,60 @@ func TestPauseAndContinueTask(t *testing.T) {
 	})
 }
 
+func TestPatchTask(t *testing.T) {
+	doTest(func() {
+		// Create a task
+		taskId := httpRequestCheckOk[string](http.MethodPost, "/api/v1/tasks", createReq)
+		if taskId == "" {
+			t.Fatal("create task failed")
+		}
+
+		// Pause the task
+		httpRequestCheckOk[any](http.MethodPut, "/api/v1/tasks/"+taskId+"/pause", nil)
+		time.Sleep(time.Millisecond * 100)
+
+		// Patch the task with new labels
+		patchReq := &model.ResolveTask{
+			Req: &base.Request{
+				Labels: map[string]string{
+					"patched": "true",
+					"version": "2",
+				},
+			},
+		}
+		httpRequestCheckOk[any](http.MethodPatch, "/api/v1/tasks/"+taskId, patchReq)
+
+		// Verify the patch was applied
+		task := httpRequestCheckOk[*download.Task](http.MethodGet, "/api/v1/tasks/"+taskId, nil)
+		if task.Meta.Req.Labels["patched"] != "true" {
+			t.Errorf("PatchTask() label 'patched' = %v, want %v", task.Meta.Req.Labels["patched"], "true")
+		}
+		if task.Meta.Req.Labels["version"] != "2" {
+			t.Errorf("PatchTask() label 'version' = %v, want %v", task.Meta.Req.Labels["version"], "2")
+		}
+
+		// Clean up
+		httpRequestCheckOk[any](http.MethodDelete, "/api/v1/tasks/"+taskId+"?force=true", nil)
+	})
+}
+
+func TestPatchTaskNotFound(t *testing.T) {
+	doTest(func() {
+		// Try to patch a non-existent task
+		patchReq := &model.ResolveTask{
+			Req: &base.Request{
+				Labels: map[string]string{
+					"test": "value",
+				},
+			},
+		}
+		code, _ := httpRequest[any](http.MethodPatch, "/api/v1/tasks/non-existent-id", patchReq)
+		if code != int(model.CodeTaskNotFound) {
+			t.Errorf("PatchTaskNotFound() result code = %v, want %v", code, model.CodeTaskNotFound)
+		}
+	})
+}
+
 func TestPauseAllAndContinueALLTasks(t *testing.T) {
 	doTest(func() {
 		cfg, err := Downloader.GetConfig()
@@ -264,6 +295,7 @@ func TestPauseAllAndContinueALLTasks(t *testing.T) {
 
 		createAndPause := func() {
 			taskId := httpRequestCheckOk[string](http.MethodPost, "/api/v1/tasks", createReq)
+			time.Sleep(time.Millisecond * 5)
 			httpRequestCheckOk[*download.Task](http.MethodPut, "/api/v1/tasks/"+taskId+"/pause", nil)
 		}
 
@@ -271,6 +303,7 @@ func TestPauseAllAndContinueALLTasks(t *testing.T) {
 		for i := 0; i < total; i++ {
 			createAndPause()
 		}
+		time.Sleep(time.Millisecond * 50)
 
 		// continue all
 		httpRequestCheckOk[any](http.MethodPut, "/api/v1/tasks/continue", nil)
@@ -603,6 +636,116 @@ func TestDoProxy(t *testing.T) {
 		if code != http.StatusNotFound {
 			t.Errorf("DoProxy() got = %v, want %v", code, http.StatusNotFound)
 		}
+	})
+}
+
+func TestTestWebhook(t *testing.T) {
+	doTest(func() {
+		// Set up a mock webhook server
+		webhookReceived := false
+		var receivedData map[string]interface{}
+		var wg sync.WaitGroup
+		wg.Add(1)
+
+		webhookServer := http.Server{
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					w.WriteHeader(http.StatusMethodNotAllowed)
+					return
+				}
+
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+
+				if err := json.Unmarshal(body, &receivedData); err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+
+				// Check Content-Type
+				if r.Header.Get("Content-Type") != "application/json" {
+					t.Errorf("TestWebhook() Content-Type got = %v, want %v", r.Header.Get("Content-Type"), "application/json")
+				}
+
+				webhookReceived = true
+				w.WriteHeader(http.StatusOK)
+				wg.Done()
+			}),
+		}
+
+		// Start webhook server
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		webhookPort := listener.Addr().(*net.TCPAddr).Port
+		webhookURL := fmt.Sprintf("http://127.0.0.1:%d/webhook", webhookPort)
+
+		go webhookServer.Serve(listener)
+		defer webhookServer.Close()
+
+		// Test with valid webhook URL
+		httpRequestCheckOk[any](http.MethodPost, "/api/v1/webhook/test", &model.TestWebhookReq{
+			URL: webhookURL,
+		})
+
+		// Wait for webhook to be received
+		wg.Wait()
+
+		if !webhookReceived {
+			t.Error("TestWebhook() webhook was not received")
+		}
+
+		// Verify webhook data structure
+		if receivedData["event"] == nil {
+			t.Error("TestWebhook() missing 'event' field")
+		}
+		if receivedData["time"] == nil {
+			t.Error("TestWebhook() missing 'time' field")
+		}
+		if receivedData["payload"] == nil {
+			t.Error("TestWebhook() missing 'payload' field")
+		}
+
+		// Test with invalid webhook URL
+		code, _ := httpRequest[any](http.MethodPost, "/api/v1/webhook/test", &model.TestWebhookReq{
+			URL: "http://invalid-webhook-url-that-does-not-exist.local:99999/webhook",
+		})
+		checkCode(code, model.CodeError)
+
+		// Test with empty URL
+		code, _ = httpRequest[any](http.MethodPost, "/api/v1/webhook/test", &model.TestWebhookReq{
+			URL: "",
+		})
+		checkCode(code, model.CodeError)
+
+		// Test with webhook server returning non-200 status
+		wg.Add(1)
+		badWebhookServer := http.Server{
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusBadRequest)
+				wg.Done()
+			}),
+		}
+		badListener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		badWebhookPort := badListener.Addr().(*net.TCPAddr).Port
+		badWebhookURL := fmt.Sprintf("http://127.0.0.1:%d/webhook", badWebhookPort)
+
+		go badWebhookServer.Serve(badListener)
+		defer badWebhookServer.Close()
+
+		code, _ = httpRequest[any](http.MethodPost, "/api/v1/webhook/test", &model.TestWebhookReq{
+			URL: badWebhookURL,
+		})
+		checkCode(code, model.CodeError)
+
+		wg.Wait()
 	})
 }
 

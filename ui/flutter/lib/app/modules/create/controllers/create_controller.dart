@@ -18,6 +18,9 @@ class CreateController extends GetxController with GetSingleTickerProviderStateM
   final oldUrl = "".obs;
   final fileDataUri = "".obs;
 
+  /// Flag to prevent handling pending create task from deep link multiple times
+  bool pendingCreateHandled = false;
+
   @override
   void onInit() {
     super.onInit();

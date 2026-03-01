@@ -1,14 +1,15 @@
 package rest
 
 import (
-	"github.com/GopeedLab/gopeed/pkg/base"
-	"github.com/GopeedLab/gopeed/pkg/download"
-	"github.com/GopeedLab/gopeed/pkg/rest/model"
-	"github.com/gorilla/mux"
 	"io"
 	"net/http"
 	"net/url"
 	"runtime"
+
+	"github.com/GopeedLab/gopeed/pkg/base"
+	"github.com/GopeedLab/gopeed/pkg/download"
+	"github.com/GopeedLab/gopeed/pkg/rest/model"
+	"github.com/gorilla/mux"
 )
 
 func Info(w http.ResponseWriter, r *http.Request) {
@@ -23,9 +24,9 @@ func Info(w http.ResponseWriter, r *http.Request) {
 }
 
 func Resolve(w http.ResponseWriter, r *http.Request) {
-	var req base.Request
+	var req model.ResolveTask
 	if ReadJson(r, w, &req) {
-		rr, err := Downloader.Resolve(&req)
+		rr, err := Downloader.Resolve(req.Req, req.Opts)
 		if err != nil {
 			WriteJson(w, model.NewErrorResult(err.Error()))
 			return
@@ -42,9 +43,9 @@ func CreateTask(w http.ResponseWriter, r *http.Request) {
 			err    error
 		)
 		if req.Rid != "" {
-			taskId, err = Downloader.Create(req.Rid, req.Opt)
+			taskId, err = Downloader.Create(req.Rid)
 		} else if req.Req != nil {
-			taskId, err = Downloader.CreateDirect(req.Req, req.Opt)
+			taskId, err = Downloader.CreateDirect(req.Req, req.Opts)
 		} else {
 			WriteJson(w, model.NewErrorResult("param invalid: rid or req", model.CodeInvalidParam))
 			return
@@ -70,6 +71,28 @@ func CreateTaskBatch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		WriteJson(w, model.NewOkResult(taskIds))
+	}
+}
+
+func PatchTask(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskId := vars["id"]
+	if taskId == "" {
+		WriteJson(w, model.NewErrorResult("param invalid: id", model.CodeInvalidParam))
+		return
+	}
+
+	var req model.ResolveTask
+	if ReadJson(r, w, &req) {
+		if err := Downloader.Patch(taskId, req.Req, req.Opts); err != nil {
+			if err == download.ErrTaskNotFound {
+				WriteJson(w, model.NewErrorResult("task not found", model.CodeTaskNotFound))
+				return
+			}
+			WriteJson(w, model.NewErrorResult(err.Error()))
+			return
+		}
+		WriteJson(w, model.NewNilResult())
 	}
 }
 
@@ -388,4 +411,15 @@ func writeError(w http.ResponseWriter, msg string) {
 func getServerConfig() *base.DownloaderStoreConfig {
 	cfg, _ := Downloader.GetConfig()
 	return cfg
+}
+
+func TestWebhook(w http.ResponseWriter, r *http.Request) {
+	var req model.TestWebhookReq
+	if ReadJson(r, w, &req) {
+		if err := Downloader.TestWebhookUrl(req.URL); err != nil {
+			WriteJson(w, model.NewErrorResult(err.Error()))
+			return
+		}
+		WriteJson(w, model.NewNilResult())
+	}
 }

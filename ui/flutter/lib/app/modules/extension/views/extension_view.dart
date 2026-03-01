@@ -34,8 +34,34 @@ class ExtensionView extends GetView<ExtensionController> {
   final _installUrlController = TextEditingController();
   final _installBtnController = IconButtonLoadingController();
 
+  Future<void> _doInstall(BuildContext context) async {
+    if (_installUrlController.text.isEmpty) {
+      controller.tryOpenDevMode();
+      return;
+    }
+    _installBtnController.start();
+    try {
+      await installExtension(InstallExtension(url: _installUrlController.text));
+      if (context.mounted) showMessage(context, 'tip'.tr, 'extensionInstallSuccess'.tr);
+      await controller.load();
+    } catch (e) {
+      if (context.mounted) showErrorMessage(context, e);
+    } finally {
+      _installBtnController.stop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Handle pending install extension from deep link
+    final args = Get.rootDelegate.arguments();
+    if (args is InstallExtension && !controller.pendingInstallHandled) {
+      controller.pendingInstallHandled = true;
+      _installUrlController.text = args.url;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _doInstall(context);
+      });
+    }
     return BasePaneBody(
       title: 'extensions'.tr,
       titleActions: [
@@ -76,22 +102,7 @@ class ExtensionView extends GetView<ExtensionController> {
                     message: 'install'.tr,
                     child: IconButtonLoading(
                       controller: _installBtnController,
-                      onPressed: () async {
-                        if (_installUrlController.text.isEmpty) {
-                          controller.tryOpenDevMode();
-                          return;
-                        }
-                        _installBtnController.start();
-                        try {
-                          await installExtension(InstallExtension(url: _installUrlController.text));
-                          if (context.mounted) showMessage(context, 'tip'.tr, 'extensionInstallSuccess'.tr);
-                          await controller.load();
-                        } catch (e) {
-                          if (context.mounted) showErrorMessage(context, e);
-                        } finally {
-                          _installBtnController.stop();
-                        }
-                      },
+                      onPressed: () => _doInstall(context),
                       icon: const Icon(FluentIcons.arrow_download_20_regular, size: 20.0),
                     ),
                   ),
@@ -449,7 +460,7 @@ class _ExtensionItem extends StatelessWidget {
     final confrimController = FilledButtonLoadingController();
     return showDialog<void>(
       context: Get.context!,
-      builder: (context) => ContentDialog(
+      builder: (dialogContext) => ContentDialog(
         content: Text('newVersionTitle'.trParams({'version': 'v${controller.updateFlags[extension.identity]!}'})),
         actions: [
           FilledButtonLoading(
@@ -460,17 +471,17 @@ class _ExtensionItem extends StatelessWidget {
                 await updateExtension(extension.identity);
                 await controller.load();
                 controller.updateFlags.remove(extension.identity);
-                Get.back();
-                if (context.mounted) showMessage(context, 'tip'.tr, 'extensionUpdateSuccess'.tr);
+                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                if (dialogContext.mounted) showMessage(dialogContext, 'tip'.tr, 'extensionUpdateSuccess'.tr);
               } catch (e) {
-                if (context.mounted) showErrorMessage(context, e);
+                if (dialogContext.mounted) showErrorMessage(dialogContext, e);
               } finally {
                 confrimController.stop();
               }
             },
             child: Text('newVersionUpdate'.tr),
           ),
-          Button(onPressed: () => Get.back(), child: Text('newVersionLater'.tr)),
+          Button(onPressed: () => Navigator.of(dialogContext).pop(), child: Text('newVersionLater'.tr)),
         ],
       ),
     );
@@ -480,7 +491,7 @@ class _ExtensionItem extends StatelessWidget {
     return showDialog<void>(
       context: Get.context!,
       barrierDismissible: false,
-      builder: (_) => ContentDialog(
+      builder: (dialogContext) => ContentDialog(
         title: Text('extensionDelete'.tr),
         actions: [
           FilledButton(
@@ -489,13 +500,13 @@ class _ExtensionItem extends StatelessWidget {
               try {
                 await deleteExtension(extension.identity);
                 await controller.load();
-                Get.back();
+                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
               } catch (e) {
                 if (context.mounted) showErrorMessage(context, e);
               }
             },
           ),
-          Button(child: Text('cancel'.tr), onPressed: () => Get.back()),
+          Button(child: Text('cancel'.tr), onPressed: () => Navigator.of(dialogContext).pop()),
         ],
       ),
     );
@@ -508,7 +519,7 @@ class _ExtensionItem extends StatelessWidget {
     return showDialog<void>(
       context: Get.context!,
       barrierDismissible: false,
-      builder: (_) => ContentDialog(
+      builder: (dialogContext) => ContentDialog(
         title: Text('setting'.tr),
         content: FormBuilder(
           key: formKey,
@@ -530,7 +541,7 @@ class _ExtensionItem extends StatelessWidget {
                     UpdateExtensionSettings(settings: formKey.currentState!.value),
                   );
                   await controller.load();
-                  Get.back();
+                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
                 }
               } catch (e) {
                 if (context.mounted) showErrorMessage(context, e);
@@ -541,7 +552,7 @@ class _ExtensionItem extends StatelessWidget {
             controller: confrimController,
             child: Text('confirm'.tr),
           ),
-          Button(onPressed: () => Get.back(), child: Text('cancel'.tr)),
+          Button(onPressed: () => Navigator.of(dialogContext).pop(), child: Text('cancel'.tr)),
         ],
       ),
     );

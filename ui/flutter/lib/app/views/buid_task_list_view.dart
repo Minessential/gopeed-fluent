@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart' hide FluentIcons;
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:get/get.dart';
 import 'package:gopeed/app/modules/task/controllers/task_list_controller.dart';
+import 'package:gopeed/app/views/adaptive_rich_text.dart';
 import 'package:gopeed/app/views/copy_button.dart';
 import 'package:gopeed/app/views/fluent/universal_pane_child.dart';
 import 'package:gopeed/app/views/icon_label.dart';
@@ -9,6 +10,8 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path/path.dart' as path;
 
 import '../../api/api.dart';
+import '../../api/model/request.dart';
+import '../../api/model/resolve_task.dart';
 import '../../api/model/task.dart';
 import '../../util/file_explorer.dart';
 import '../../util/message.dart';
@@ -195,6 +198,26 @@ class _Item extends StatelessWidget {
     return task.isFolder;
   }
 
+  double? getProgress() {
+    final totalSize = task.meta.res?.size ?? 0;
+    return totalSize <= 0 ? null : (task.progress.downloaded / totalSize) * 100;
+  }
+
+  String getExtractionStatusText() {
+    switch (task.progress.extractStatus) {
+      case ExtractStatus.extracting:
+        return '${'extracting'.tr} ${task.progress.extractProgress}%';
+      case ExtractStatus.done:
+        return 'extractDone'.tr;
+      case ExtractStatus.error:
+        return 'extractError'.tr;
+      case ExtractStatus.waitingParts:
+        return 'waitingParts'.tr;
+      default:
+        return '';
+    }
+  }
+
   String getProgressText() {
     if (isDone()) {
       return Util.fmtByte(task.meta.res!.size);
@@ -204,6 +227,51 @@ class _Item extends StatelessWidget {
     }
     final total = task.meta.res!.size;
     return Util.fmtByte(task.progress.downloaded) + (total > 0 ? " / ${Util.fmtByte(total)}" : "");
+  }
+
+  // Get percentage text, e.g. "50.5%"
+  String getPercentText() {
+    final total = task.meta.res?.size ?? 0;
+    if (total <= 0 || isDone()) return "";
+    double? p = getProgress();
+    if (p == null) return "";
+    return "${p.toStringAsFixed(1)}%";
+  }
+
+  // Get ETA text, e.g. "00:05:30"
+  String getEtaText() {
+    if (isDone()) return "";
+    if (!isRunning()) return "";
+
+    final total = task.meta.res?.size ?? 0;
+    final downloaded = task.progress.downloaded;
+    final speed = task.progress.speed;
+
+    // If speed is 0 or total unknown, don't show time
+    if (total <= 0 || speed <= 0) {
+      return "";
+    }
+
+    final remainingBytes = total - downloaded;
+    // If remaining bytes <= 0, download is essentially complete
+    if (remainingBytes <= 0) {
+      return "";
+    }
+
+    // Use ceiling division to avoid showing 0 seconds when there's still data remaining
+    final remainingSeconds = (remainingBytes + speed - 1) ~/ speed;
+
+    // If time is too long (e.g. > 1 day), return > 1d
+    if (remainingSeconds > 86400) return "> 1d";
+
+    Duration duration = Duration(seconds: remainingSeconds);
+    String twoDigits(int n) => n.toString().padLeft(2, "0");
+
+    if (duration.inHours > 0) {
+      return "${twoDigits(duration.inHours)}:${twoDigits(duration.inMinutes.remainder(60))}:${twoDigits(duration.inSeconds.remainder(60))}";
+    } else {
+      return "${twoDigits(duration.inMinutes.remainder(60))}:${twoDigits(duration.inSeconds.remainder(60))}";
+    }
   }
 
   Future<void> _showInfoDialog(BuildContext context, Task task) {
@@ -257,53 +325,91 @@ class _Item extends StatelessWidget {
     );
   }
 
-  Widget _buildAction(BuildContext context) {
-    double getProgress() {
-      final totalSize = task.meta.res?.size ?? 0;
-      return totalSize <= 0 ? 0 : (task.progress.downloaded / totalSize) * 100;
-    }
+  Widget _buildAction() {
+    return Builder(
+      builder: (context) {
+        final theme = FluentTheme.of(context);
+        final color = theme.brightness == Brightness.light ? Colors.white : const Color(0xE4000000);
 
-    final theme = FluentTheme.of(context);
-    final color = theme.brightness == Brightness.light ? Colors.white : const Color(0xE4000000);
-
-    return SizedBox(
-      width: 95,
-      child: isDone()
-          ? Button(onPressed: () => task.open(), child: Text('open'.tr))
-          : FilledButton(
-              onPressed: () {
-                if (isRunning()) {
-                  pauseTask(task.id).catchError((e) {
-                    if (context.mounted) showErrorMessage(context, e);
-                  });
-                } else {
-                  continueTask(task.id).catchError((e) {
-                    if (context.mounted) showErrorMessage(context, e);
-                  });
-                }
-              },
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: Stack(
-                  fit: StackFit.expand,
-                  alignment: Alignment.center,
-                  children: [
-                    ProgressRing(
-                      value: isRunning() ? getProgress() : null,
-                      strokeWidth: 2,
-                      activeColor: color,
-                      backgroundColor: color.withValues(alpha: 0.3),
-                    ),
-                    Icon(
-                      isRunning() ? FluentIcons.pause_12_filled : FluentIcons.play_12_filled,
-                      size: 12.0,
-                      color: color,
-                    ),
-                  ],
-                ),
+        Widget buildDownloadAction() {
+          return FilledButton(
+            onPressed: () {
+              if (isRunning()) {
+                pauseTask(task.id).catchError((e) {
+                  if (context.mounted) showErrorMessage(context, e);
+                });
+              } else {
+                continueTask(task.id).catchError((e) {
+                  if (context.mounted) showErrorMessage(context, e);
+                });
+              }
+            },
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: Stack(
+                fit: StackFit.expand,
+                alignment: Alignment.center,
+                children: [
+                  ProgressRing(
+                    value: isRunning() ? getProgress() : null,
+                    strokeWidth: 2,
+                    activeColor: color,
+                    backgroundColor: color.withValues(alpha: 0.3),
+                  ),
+                  Icon(
+                    isRunning() ? FluentIcons.pause_12_filled : FluentIcons.play_12_filled,
+                    size: 12.0,
+                    color: color,
+                  ),
+                ],
               ),
             ),
+          );
+        }
+
+        // Extract status
+        Widget buildExtractAction() {
+          final isExtracting = task.progress.extractStatus == ExtractStatus.extracting;
+          final isExtractDone = task.progress.extractStatus == ExtractStatus.done;
+          final isWaitingParts = task.progress.extractStatus == ExtractStatus.waitingParts;
+          return FilledButton(
+            onPressed: () {},
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: () {
+                return isExtracting
+                    ? ProgressRing(
+                        value: task.progress.extractProgress.toDouble(),
+                        strokeWidth: 2,
+                        activeColor: color,
+                        backgroundColor: color.withValues(alpha: 0.3),
+                      )
+                    : (isExtractDone
+                          ? Icon(FluentIcons.checkmark_circle_16_regular, size: 16.0, color: color)
+                          : isWaitingParts
+                          ? ProgressRing(
+                              value: null,
+                              strokeWidth: 2,
+                              activeColor: color,
+                              backgroundColor: color.withValues(alpha: 0.3),
+                            )
+                          : Icon(FluentIcons.error_circle_16_regular, size: 16.0, color: color));
+              }(),
+            ),
+          );
+        }
+
+        return SizedBox(
+          width: 95,
+          child: task.progress.extractStatus != ExtractStatus.none
+              ? buildExtractAction()
+              : isDone()
+              ? Button(onPressed: () => task.open(), child: Text('open'.tr))
+              : buildDownloadAction(),
+        );
+      },
     );
   }
 
@@ -319,6 +425,8 @@ class _Item extends StatelessWidget {
       case TaskListStatus.downloaded:
         taskListController = Get.find<TaskDownloadedController>();
     }
+
+    final appController = Get.find<AppController>();
 
     return HoverButton(
       onPressed: () {},
@@ -366,29 +474,70 @@ class _Item extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 16),
+                      // Progress text + Percentage
                       Expanded(
                         flex: 3,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          spacing: 6,
                           children: [
                             Text(task.name, maxLines: 2, overflow: TextOverflow.ellipsis),
-                            Text(getProgressText(), style: theme.typography.caption),
+                            () {
+                              final pendingUpdateIcon = appController.pendingUpdateTask.value?.id == task.id
+                                  ? Tooltip(
+                                      message: 'updateUrlListeningTip'.tr,
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(left: 8),
+                                        child: Icon(
+                                          FluentIcons.desktop_signal_20_regular,
+                                          size: 14,
+                                          color: FluentTheme.of(context).accentColor,
+                                        ),
+                                      ),
+                                    )
+                                  : null;
+                              return Row(
+                                children: [
+                                  Flexible(
+                                    child: AdaptiveRichText(
+                                      longTextSpan: TextSpan(
+                                        text:
+                                            '${getProgressText()} ${getPercentText().isNotEmpty ? '(${getPercentText()})' : ''}',
+                                      ),
+                                      shortTextSpan: TextSpan(text: getPercentText()),
+                                      style: theme.typography.caption,
+                                    ),
+                                  ),
+                                  ?pendingUpdateIcon,
+                                ],
+                              );
+                            }(),
                           ],
                         ),
                       ),
+                      if (task.progress.extractStatus != ExtractStatus.none && constraints.maxWidth > 650)
+                        Expanded(flex: 1, child: Text(getExtractionStatusText(), textAlign: TextAlign.center)),
                       if (constraints.maxWidth > 750)
                         Expanded(flex: 1, child: Text(task.status.humanname, textAlign: TextAlign.center)),
                       if (constraints.maxWidth > 650)
                         Expanded(
                           flex: 1,
-                          child: Text(
-                            "${Util.fmtByte(task.progress.speed)} / s",
-                            maxLines: 1,
+                          child: AdaptiveRichText(
                             textAlign: TextAlign.center,
+                            longTextSpan: TextSpan(
+                              children: [
+                                if (getEtaText().isNotEmpty) ...[
+                                  TextSpan(text: getEtaText()),
+                                  const TextSpan(text: " | "),
+                                ],
+                                TextSpan(text: "${Util.fmtByte(task.progress.speed)} / s"),
+                              ],
+                            ),
+                            shortTextSpan: TextSpan(text: "${Util.fmtByte(task.progress.speed)} / s"),
                           ),
                         ),
                       const SizedBox(width: 8),
-                      _buildAction(context),
+                      _buildAction(),
                       const SizedBox(width: 8),
                       FlyoutTarget(
                         controller: menuController,
@@ -406,11 +555,55 @@ class _Item extends StatelessWidget {
                               builder: (ctx) {
                                 return MenuFlyout(
                                   items: [
+                                    if (task.progress.extractStatus != ExtractStatus.none)
+                                      MenuFlyoutItem(
+                                        leading: const Icon(FluentIcons.open_16_regular, size: 16.0),
+                                        text: Text('open'.tr),
+                                        onPressed: () => task.open(),
+                                      ),
                                     if (isDone())
                                       MenuFlyoutItem(
                                         leading: const Icon(FluentIcons.folder_open_16_regular, size: 16.0),
                                         text: Text('openFolder'.tr),
                                         onPressed: () => task.explorer(),
+                                      )
+                                    else if (task.protocol == Protocol.http &&
+                                        (task.status == Status.pause || task.status == Status.error))
+                                      MenuFlyoutSubItem(
+                                        leading: const Icon(FluentIcons.arrow_sync_16_regular, size: 16.0),
+                                        text: Text('updateUrl'.tr),
+                                        items: (_) => [
+                                          MenuFlyoutItem(
+                                            leading: const Icon(FluentIcons.edit_16_regular, size: 16.0),
+                                            text: Text('updateUrlManual'.tr),
+                                            onPressed: () {
+                                              Flyout.of(ctx).close();
+                                              if (context.mounted) showUpdateUrlDialog(context, task);
+                                            },
+                                          ),
+                                          MenuFlyoutItem(
+                                            leading: Icon(
+                                              appController.pendingUpdateTask.value?.id == task.id
+                                                  ? FluentIcons.dismiss_circle_16_regular
+                                                  : FluentIcons.desktop_sync_16_regular,
+                                            ),
+                                            text: Text(
+                                              appController.pendingUpdateTask.value?.id == task.id
+                                                  ? 'updateUrlCancelListen'.tr
+                                                  : 'updateUrlListen'.tr,
+                                            ),
+                                            onPressed: () {
+                                              if (appController.pendingUpdateTask.value?.id == task.id) {
+                                                appController.pendingUpdateTask.value = null;
+                                              } else {
+                                                appController.pendingUpdateTask.value = PendingUpdateTask(
+                                                  id: task.id,
+                                                  name: task.name,
+                                                );
+                                              }
+                                            },
+                                          ),
+                                        ],
                                       ),
                                     MenuFlyoutItem(
                                       leading: const Icon(FluentIcons.delete_16_regular, size: 16.0),
@@ -487,6 +680,128 @@ Future<void> showDeleteDialog(BuildContext context, List<String> ids) {
         ),
         Button(child: Text('cancel'.tr), onPressed: () => Get.back()),
       ],
+    ),
+  );
+}
+
+Future<void> showUpdateUrlDialog(BuildContext context, Task task) async {
+  final urlController = TextEditingController(text: task.meta.req.url);
+  final headerControllers = <MapEntry<TextEditingController, TextEditingController>>[];
+
+  // Initialize with existing headers if available
+  if (task.meta.req.extra != null && task.meta.req.extra is Map) {
+    final extra = task.meta.req.extra as Map<String, dynamic>;
+    if (extra.containsKey('header') && extra['header'] is Map) {
+      final headers = extra['header'] as Map<String, dynamic>;
+      for (final entry in headers.entries) {
+        headerControllers.add(
+          MapEntry(TextEditingController(text: entry.key), TextEditingController(text: entry.value.toString())),
+        );
+      }
+    }
+  }
+
+  // Add one empty header row by default if none exists
+  if (headerControllers.isEmpty) {
+    headerControllers.add(MapEntry(TextEditingController(), TextEditingController()));
+  }
+
+  return showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => StatefulBuilder(
+      builder: (context, setState) {
+        return ContentDialog(
+          constraints: const BoxConstraints(maxWidth: 600),
+          title: Text('updateUrl'.tr),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 16,
+              children: [
+                InfoLabel(
+                  label: 'downloadLink'.tr,
+                  child: TextBox(
+                    controller: urlController,
+                    placeholder: 'updateUrlDialogHint'.tr,
+                    prefix: const Icon(FluentIcons.link_20_filled),
+                  ),
+                ),
+
+                ...headerControllers.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final controllers = entry.value;
+                  final child = Row(
+                    children: [
+                      Expanded(
+                        child: TextBox(controller: controllers.key, placeholder: 'httpHeaderName'.tr),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextBox(controller: controllers.value, placeholder: 'httpHeaderValue'.tr),
+                      ),
+                      IconButton(
+                        icon: const Icon(FluentIcons.add_20_regular, size: 18),
+                        onPressed: () {
+                          setState(() {
+                            headerControllers.add(MapEntry(TextEditingController(), TextEditingController()));
+                          });
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(FluentIcons.subtract_20_regular, size: 18),
+                        onPressed: () {
+                          if (headerControllers.length <= 1) {
+                            return;
+                          }
+                          setState(() {
+                            headerControllers.removeAt(index);
+                          });
+                        },
+                      ),
+                    ],
+                  );
+                  return index == 0 ? InfoLabel(label: 'httpHeader'.tr, child: child) : child;
+                }),
+              ],
+            ),
+          ),
+          actions: [
+            FilledButton(
+              child: Text('confirm'.tr),
+              onPressed: () async {
+                try {
+                  // Build headers map
+                  final headers = <String, String>{};
+                  for (final entry in headerControllers) {
+                    final key = entry.key.text.trim();
+                    final value = entry.value.text.trim();
+                    if (key.isNotEmpty) {
+                      headers[key] = value;
+                    }
+                  }
+
+                  // Build ReqExtraHttp
+                  final reqExtra = ReqExtraHttp(header: headers);
+
+                  // Create patch request
+                  final patchData = ResolveTask(
+                    req: Request(url: urlController.text.trim(), extra: reqExtra.toJson()),
+                  );
+
+                  await patchTask(task.id, patchData);
+                  await continueTask(task.id);
+                  Get.back();
+                } catch (e) {
+                  if (context.mounted) showErrorMessage(context, e);
+                }
+              },
+            ),
+            Button(child: Text('cancel'.tr), onPressed: () => Get.back()),
+          ],
+        );
+      },
     ),
   );
 }

@@ -15,7 +15,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # In iOS, build-name is used as CFBundleShortVersionString while build-number used as CFBundleVersion.
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-version: 1.8.2+1
+version: 1.9.1+1
 
 environment:
   sdk: ">=3.8.0 <4.0.0"
@@ -48,8 +48,9 @@ dependencies:
   app_links: ^6.3.3
   uri_to_file: ^1.0.0
   window_manager: ^0.4.2
+  hotkey_manager: ^0.2.3
   share_plus: ^10.1.0
-  flutter_form_builder: 10.0.1
+  flutter_form_builder: 10.2.0
   form_builder_validators: ^11.1.1
   flutter_foreground_task: ^8.2.0
   open_filex: ^4.7.0
@@ -100,7 +101,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^2.0.0
   ffigen: ^8.0.2
-  # build json model: dart run build_runner build --delete-conflicting-outputs
+  # build json model: flutter pub run build_runner build --delete-conflicting-outputs
   build_runner: ^2.2.1
   json_serializable: ^6.3.2
   flutter_launcher_icons: ^0.13.1
@@ -148,7 +149,7 @@ flutter:
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages
 
-# dart run flutter_launcher_icons:main
+# flutter pub run flutter_launcher_icons:main
 flutter_icons:
   image_path: "assets/icon/icon_1024.png"
   android: true # can specify file name here e.g. "ic_launcher"
@@ -164,7 +165,7 @@ flutter_icons:
     generate: true
     image_path: "assets/icon/icon_macos_1024.png"
 
-# dart run ffigen
+# flutter pub run ffigen
 ffigen:
   name: LibgopeedBind
   description: Bindings to gopeed library.

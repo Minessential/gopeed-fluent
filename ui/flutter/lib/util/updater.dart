@@ -18,6 +18,22 @@ class VersionInfo {
   VersionInfo(this.version, this.changeLog);
 }
 
+int _compareVersions(String a, String b) {
+  final aParts = RegExp(r'\d+').allMatches(a).map((m) => int.parse(m.group(0)!)).toList();
+  final bParts = RegExp(r'\d+').allMatches(b).map((m) => int.parse(m.group(0)!)).toList();
+  final maxLen = aParts.length > bParts.length ? aParts.length : bParts.length;
+
+  for (var i = 0; i < maxLen; i++) {
+    final aVal = i < aParts.length ? aParts[i] : 0;
+    final bVal = i < bParts.length ? bParts[i] : 0;
+    if (aVal != bVal) {
+      return aVal.compareTo(bVal);
+    }
+  }
+
+  return 0;
+}
+
 Future<VersionInfo?> checkUpdate() async {
   String? releaseDataStr;
   try {
@@ -38,19 +54,9 @@ Future<VersionInfo?> checkUpdate() async {
   }
   final latestVersion = releaseData["tag_name"].substring(1);
 
-  // compare version x.y.z to x.y.z
+  // Compare semantic versions like x.y.z (supports different segment lengths).
   final currentVersion = packageInfo.version;
-  var isNewVersion = false;
-  if (latestVersion != currentVersion) {
-    final currentVersionList = currentVersion.split(".");
-    final latestVersionList = latestVersion.split(".");
-    for (var i = 0; i < currentVersionList.length; i++) {
-      if (int.parse(latestVersionList[i]) > int.parse(currentVersionList[i])) {
-        isNewVersion = true;
-        break;
-      }
-    }
-  }
+  final isNewVersion = _compareVersions(latestVersion, currentVersion) > 0;
 
   if (!isNewVersion) {
     return null;

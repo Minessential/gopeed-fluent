@@ -9,6 +9,20 @@ enum Status { ready, running, pause, wait, error, done }
 
 enum Protocol { http, bt }
 
+// ExtractStatus enum matching Go backend
+enum ExtractStatus {
+  @JsonValue('')
+  none,
+  @JsonValue('extracting')
+  extracting,
+  @JsonValue('done')
+  done,
+  @JsonValue('error')
+  error,
+  @JsonValue('waitingParts')
+  waitingParts
+}
+
 @JsonSerializable(explicitToJson: true)
 class Task extends Equatable {
   final String id;
@@ -48,6 +62,8 @@ class Progress {
   int downloaded;
   int uploadSpeed;
   int uploaded;
+  ExtractStatus extractStatus;
+  int extractProgress;
 
   Progress({
     required this.used,
@@ -55,6 +71,8 @@ class Progress {
     required this.downloaded,
     required this.uploadSpeed,
     required this.uploaded,
+    this.extractStatus = ExtractStatus.none,
+    this.extractProgress = 0,
   });
 
   factory Progress.fromJson(Map<String, dynamic> json) => _$ProgressFromJson(json);

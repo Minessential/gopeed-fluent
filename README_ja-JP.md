@@ -5,6 +5,7 @@
 [![Release](https://img.shields.io/github/release/GopeedLab/gopeed.svg)](https://github.com/GopeedLab/gopeed/releases)
 [![Download](https://img.shields.io/github/downloads/GopeedLab/gopeed/total.svg)](https://github.com/GopeedLab/gopeed/releases)
 [![Donate](https://img.shields.io/badge/%24-donate-ff69b4.svg)](https://docs.gopeed.com/donate.html)
+[![WeChat](https://img.shields.io/badge/WeChat%20Official%20Account-07C160?logo=wechat&logoColor=white)](https://raw.githubusercontent.com/GopeedLab/gopeed/main/_docs/img/weixin.png)
 [![Discord](https://img.shields.io/discord/1037992631881449472?label=Discord&logo=discord&style=social)](https://discord.gg/ZUJqJrwCGB)
 
 <a href="https://trendshift.io/repositories/7953" target="_blank"><img src="https://trendshift.io/api/badge/repositories/7953" alt="GopeedLab%2Fgopeed | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
@@ -159,6 +160,12 @@ Gopeed (正式名 Go Speed) は `Golang` + `Flutter` によって開発された
 
 ### 🛠️ コマンドツール
 
+## 📱 WeChat 公式アカウント
+
+公式アカウントをフォローして、最新のアップデートやニュースを入手してください。
+
+<img src="_docs/img/weixin.png" width="200" />
+
 ## 💝 寄付
 
 もしこのプロジェクトがお気に召しましたら、このプロジェクトの発展を支援するために[寄付](https://docs.gopeed.com/donate.html)をご検討ください！
@@ -175,8 +182,8 @@ Gopeed (正式名 Go Speed) は `Golang` + `Flutter` によって開発された
 
 ### 🌍 環境
 
-1. Go 言語 1.23+
-2. Flutter 3.24+
+1. Go 言語 1.24+
+2. Flutter 3.38+
 
 ### 📋 クローン
 

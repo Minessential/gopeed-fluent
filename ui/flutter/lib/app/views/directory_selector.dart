@@ -15,31 +15,93 @@ import '../../util/util.dart';
 
 final deviceInfo = DeviceInfoPlugin();
 
+// Placeholder information for download directory
+class PathPlaceholder {
+  final String placeholder;
+  final String description;
+  final String example;
+
+  const PathPlaceholder({required this.placeholder, required this.description, required this.example});
+}
+
+// Available placeholders for download directory
+List<PathPlaceholder> getPathPlaceholders() {
+  final now = DateTime.now();
+  final year = now.year.toString();
+  final month = now.month.toString().padLeft(2, '0');
+  final day = now.day.toString().padLeft(2, '0');
+
+  return [
+    PathPlaceholder(placeholder: '%year%', description: 'placeholderYear'.tr, example: year),
+    PathPlaceholder(placeholder: '%month%', description: 'placeholderMonth'.tr, example: month),
+    PathPlaceholder(placeholder: '%day%', description: 'placeholderDay'.tr, example: day),
+    PathPlaceholder(placeholder: '%date%', description: 'placeholderDate'.tr, example: '$year-$month-$day'),
+  ];
+}
+
+// Render placeholders in a path with actual values
+String renderPathPlaceholders(String path) {
+  if (path.isEmpty) return path;
+
+  final now = DateTime.now();
+  final year = now.year.toString();
+  final month = now.month.toString().padLeft(2, '0');
+  final day = now.day.toString().padLeft(2, '0');
+  final date = '$year-$month-$day';
+
+  return path
+      .replaceAll('%year%', year)
+      .replaceAll('%month%', month)
+      .replaceAll('%day%', day)
+      .replaceAll('%date%', date);
+}
+
 class DirectorySelector extends StatefulWidget {
   final TextEditingController controller;
   final bool showLabel;
   final bool showAndoirdToggle;
+  final bool allowEdit;
+  final bool showPlaceholderButton;
+  final VoidCallback? onEditComplete;
 
-  const DirectorySelector({Key? key, required this.controller, this.showLabel = true, this.showAndoirdToggle = false})
-    : super(key: key);
+  const DirectorySelector({
+    Key? key,
+    required this.controller,
+    this.showLabel = true,
+    this.showAndoirdToggle = false,
+    this.allowEdit = false,
+    this.showPlaceholderButton = false,
+    this.onEditComplete,
+  }) : super(key: key);
 
   @override
   State<DirectorySelector> createState() => _DirectorySelectorState();
 }
 
 class _DirectorySelectorState extends State<DirectorySelector> {
+  final menuController = FlyoutController();
+
+  @override
+  void dispose() {
+    menuController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     Widget? buildSelectWidget() {
       if (Util.isDesktop()) {
         return Column(
           children: [
-            const SizedBox(height: 18),
+            if (widget.showLabel) const SizedBox(height: 18),
             IconButton(
               icon: const Icon(FluentIcons.folder_open_20_regular, size: 20),
               onPressed: () async {
                 var dir = await FilePicker.platform.getDirectoryPath();
-                if (dir != null) widget.controller.text = dir;
+                if (dir != null) {
+                  widget.controller.text = dir;
+                  widget.onEditComplete?.call();
+                }
               },
             ),
           ],
@@ -63,6 +125,7 @@ class _DirectorySelectorState extends State<DirectorySelector> {
             } else {
               widget.controller.text = '${(await DownloadsPath.downloadsDirectory())!.path}/Gopeed';
             }
+            widget.onEditComplete?.call();
           },
           cancelToggle: (index) async {
             if (index == 0) {
@@ -104,11 +167,71 @@ class _DirectorySelectorState extends State<DirectorySelector> {
       return null;
     }
 
-    final textFormBox = TextFormBox(
-      readOnly: Util.isWeb() ? false : true,
-      controller: widget.controller,
-      validator: (v) {
-        return v!.trim().isNotEmpty ? null : 'downloadDirValid'.tr;
+    Widget? buildPlaceholderButton() {
+      if (!widget.showPlaceholderButton) return null;
+
+      void onPlaceholderItemTap(String placeholder) {
+        final currentText = widget.controller.text;
+        final selection = widget.controller.selection;
+        final cursorPosition = selection.baseOffset >= 0 ? selection.baseOffset : currentText.length;
+
+        final newText = currentText.substring(0, cursorPosition) + placeholder + currentText.substring(cursorPosition);
+        widget.controller.text = newText;
+        widget.controller.selection = TextSelection.fromPosition(
+          TextPosition(offset: cursorPosition + placeholder.length),
+        );
+        widget.onEditComplete?.call();
+      }
+
+      return Column(
+        children: [
+          if (widget.showLabel) const SizedBox(height: 18),
+          FlyoutTarget(
+            controller: menuController,
+            child: Tooltip(
+              message: 'insertPlaceholder'.tr,
+              child: IconButton(
+                icon: const Icon(FluentIcons.code_20_regular, size: 20.0),
+                onPressed: () {
+                  menuController.showFlyout<String>(
+                    navigatorKey: Get.key.currentState,
+                    builder: (context) {
+                      return MenuFlyout(
+                        items: getPathPlaceholders().map((p) {
+                          return MenuFlyoutItem(
+                            text: Tooltip(
+                              message: 'example'.trParams({'value': p.example}),
+                              child: Text('${p.placeholder} - ${p.description}'),
+                            ),
+                            onPressed: () => onPlaceholderItemTap(p.placeholder),
+                          );
+                        }).toList(),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    final textFormBox = ValueListenableBuilder<TextEditingValue>(
+      valueListenable: widget.controller,
+      builder: (context, value, child) {
+        return TextFormBox(
+          readOnly: widget.allowEdit ? false : (Util.isWeb() ? false : true),
+          controller: widget.controller,
+          validator: (v) {
+            return v!.trim().isNotEmpty ? null : 'downloadDirValid'.tr;
+          },
+          onEditingComplete: widget.onEditComplete,
+          onTapOutside: (event) {
+            // Call onEditComplete when user taps outside the field
+            widget.onEditComplete?.call();
+          },
+        );
       },
     );
     return Row(
@@ -118,6 +241,7 @@ class _DirectorySelectorState extends State<DirectorySelector> {
           child: widget.showLabel ? InfoLabel(label: 'downloadDir'.tr, child: textFormBox) : textFormBox,
         ),
         ?buildSelectWidget(),
+        ?buildPlaceholderButton(),
       ],
     );
   }

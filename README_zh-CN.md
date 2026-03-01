@@ -5,6 +5,7 @@
 [![Release](https://img.shields.io/github/release/GopeedLab/gopeed.svg)](https://github.com/GopeedLab/gopeed/releases)
 [![Download](https://img.shields.io/github/downloads/GopeedLab/gopeed/total.svg)](https://github.com/GopeedLab/gopeed/releases)
 [![Donate](https://img.shields.io/badge/%24-donate-ff69b4.svg)](https://docs.gopeed.com/zh/donate.html)
+[![WeChat](https://img.shields.io/badge/%E5%BE%AE%E4%BF%A1%E5%85%AC%E4%BC%97%E5%8F%B7-07C160?logo=wechat&logoColor=white)](https://raw.githubusercontent.com/GopeedLab/gopeed/main/_docs/img/weixin.png)
 [![Discord](https://img.shields.io/discord/1037992631881449472?label=Discord&logo=discord&style=social)](https://discord.gg/ZUJqJrwCGB)
 
 <a href="https://trendshift.io/repositories/7953" target="_blank"><img src="https://trendshift.io/api/badge/repositories/7953" alt="GopeedLab%2Fgopeed | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
@@ -169,6 +170,12 @@ go install github.com/GopeedLab/gopeed/cmd/gopeed@latest
 
 Gopeed 还提供了浏览器扩展用于接管浏览器下载，支持 Chrome、Edge、Firefox 等浏览器，具体请参考：[https://github.com/GopeedLab/browser-extension](https://github.com/GopeedLab/browser-extension)
 
+## 📱 微信公众号
+
+关注公众号获取项目最新动态和资讯。
+
+<img src="_docs/img/weixin.png" width="200" />
+
 ## 💝 赞助
 
 如果觉得项目对你有帮助，请考虑[赞助](https://docs.gopeed.com/zh/donate)以支持这个项目的发展，非常感谢！
@@ -185,8 +192,8 @@ Gopeed 还提供了浏览器扩展用于接管浏览器下载，支持 Chrome、
 
 ### 🌍 环境要求
 
-1. Golang 1.23+
-2. Flutter 3.24+
+1. Golang 1.24+
+2. Flutter 3.38+
 
 ### 📋 克隆项目
 

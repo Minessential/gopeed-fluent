@@ -52,6 +52,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - name: Enable long paths for flutter main branch checks
+        run: |
+          git config --global core.longpaths true
 
       # Install LLVM environment only on ARM64
       - name: Install llvm-mingw-ucrt-aarch64 (ARM64 only)
@@ -122,6 +125,7 @@ jobs:
               # for ARM64
               $mingw = "$env:CLANGARM64_ROOT\aarch64-w64-mingw32\bin"
               cp $mingw\libc++.dll $release
+              cp $mingw\libunwind.dll $release
           } else {
               # for x64
               $mingw = "C:\Program Files\Git\mingw64\bin"

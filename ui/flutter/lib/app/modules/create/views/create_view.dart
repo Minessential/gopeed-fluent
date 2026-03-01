@@ -6,6 +6,7 @@ import 'package:fluent_ui/fluent_ui.dart' hide FluentIcons;
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:gopeed/api/model/downloader_config.dart';
 import 'package:gopeed/app/views/filled_button_loading.dart';
 import 'package:gopeed/app/views/fluent/base_pane_body.dart';
 import 'package:gopeed/app/views/fluent/universal_scroll_view.dart';
@@ -18,6 +19,7 @@ import '../../../../api/model/create_task_batch.dart';
 import '../../../../api/model/options.dart';
 import '../../../../api/model/request.dart';
 import '../../../../api/model/resolve_result.dart';
+import '../../../../api/model/resolve_task.dart';
 import '../../../../api/model/task.dart';
 import '../../../../database/database.dart';
 import '../../../../util/input_formatter.dart';
@@ -48,10 +50,15 @@ class CreateView extends GetView<CreateController> {
     (name: TextEditingController(text: "Referer"), value: TextEditingController()),
   ];
   final _btTrackerController = TextEditingController();
+  final _archivePasswordController = TextEditingController();
 
   final _availableSchemes = ["http:", "https:", "magnet:"];
 
   final _skipVerifyCertController = false.obs;
+  final _autoTorrentController = Rxn<bool>();
+  final _deleteTorrentAfterDownloadController = Rxn<bool>();
+  final _autoExtractController = Rxn<bool>();
+  final _deleteAfterExtractController = Rxn<bool>();
 
   CreateView({Key? key}) : super(key: key);
 
@@ -63,11 +70,15 @@ class CreateView extends GetView<CreateController> {
       _connectionsController.text = appController.downloaderConfig.value.protocolConfig.http.connections.toString();
     }
     if (_pathController.text.isEmpty) {
-      _pathController.text = appController.downloaderConfig.value.downloadDir;
+      // Render placeholders when initializing the path
+      final downloadDir = appController.downloaderConfig.value.downloadDir;
+      _pathController.text = renderPathPlaceholders(downloadDir);
     }
 
+    // Handle pending create task from deep link
     final CreateTask? routerParams = Get.rootDelegate.arguments();
-    if (routerParams?.req?.url.isNotEmpty ?? false) {
+    if ((routerParams?.req?.url.isNotEmpty ?? false) && !controller.pendingCreateHandled) {
+      controller.pendingCreateHandled = true;
       // get url from route arguments
       final url = routerParams!.req!.url;
       _urlController.text = url;
@@ -96,13 +107,13 @@ class CreateView extends GetView<CreateController> {
         }
 
         // handle options
-        if (routerParams.opt != null) {
-          _renameController.text = routerParams.opt!.name;
-          _pathController.text = routerParams.opt!.path;
+        if (routerParams.opts != null) {
+          _renameController.text = routerParams.opts!.name;
+          _pathController.text = routerParams.opts!.path;
 
           final optionsHandlers = {
             Protocol.http: () {
-              final opt = routerParams.opt!;
+              final opt = routerParams.opts!;
               _renameController.text = opt.name;
               _pathController.text = opt.path;
               if (opt.extra != null) {
@@ -112,7 +123,7 @@ class CreateView extends GetView<CreateController> {
             },
             Protocol.bt: null,
           };
-          if (routerParams.opt?.extra != null) {
+          if (routerParams.opts?.extra != null) {
             optionsHandlers[protocol]?.call();
           }
         }
@@ -275,7 +286,8 @@ class CreateView extends GetView<CreateController> {
                   padding: const EdgeInsets.only(left: 44.0),
                   child: DirectorySelector(controller: _pathController),
                 ),
-
+                // Category selector
+                ?_buildCategorySelector(appController),
                 Obx(
                   () => Visibility(
                     visible: controller.showAdvanced.value,
@@ -284,6 +296,7 @@ class CreateView extends GetView<CreateController> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        const Divider(),
                         _FormRow(
                           icon: FluentIcons.server_link_20_regular,
                           child: Container(
@@ -405,7 +418,6 @@ class CreateView extends GetView<CreateController> {
                                   child: TextFormBox(controller: e.name, placeholder: 'httpHeaderName'.tr),
                                 ),
                                 const SizedBox(width: 10),
-
                                 Flexible(
                                   child: TextFormBox(controller: e.value, placeholder: 'httpHeaderValue'.tr),
                                 ),
@@ -436,14 +448,75 @@ class CreateView extends GetView<CreateController> {
                         if (controller.advancedTabIndex.value == 0)
                           Padding(
                             padding: const EdgeInsets.only(left: 44),
-                            child: Checkbox(
-                              content: Text('skipVerifyCert'.tr),
-                              checked: _skipVerifyCertController.value,
-                              onChanged: (bool? value) {
-                                _skipVerifyCertController.value = value ?? false;
-                              },
+                            child: Obx(
+                              () => Column(
+                                spacing: 12,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Checkbox(
+                                    content: Text('skipVerifyCert'.tr),
+                                    checked: _skipVerifyCertController.value,
+                                    onChanged: (bool? value) {
+                                      _skipVerifyCertController.value = value ?? false;
+                                    },
+                                  ),
+
+                                  // AutoTorrent options
+                                  Checkbox(
+                                    content: Text('autoTorrentEnable'.tr),
+                                    checked: _autoTorrentController.value ?? false,
+                                    onChanged: (bool? value) {
+                                      _autoTorrentController.value = value ?? false;
+                                    },
+                                  ),
+                                  if (_autoTorrentController.value ?? false)
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 30.0),
+                                      child: Checkbox(
+                                        content: Text('autoTorrentDeleteAfterDownload'.tr),
+                                        checked: _deleteTorrentAfterDownloadController.value ?? false,
+                                        onChanged: (bool? value) {
+                                          _deleteTorrentAfterDownloadController.value = value ?? false;
+                                        },
+                                      ),
+                                    ),
+
+                                  // AutoExtract options
+                                  Checkbox(
+                                    content: Text('autoExtract'.tr),
+                                    checked: _autoExtractController.value ?? false,
+                                    onChanged: (bool? value) {
+                                      _autoExtractController.value = value ?? false;
+                                    },
+                                  ),
+                                  if (_autoExtractController.value ?? false) ...[
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 30.0),
+                                      child: InfoLabel(
+                                        label: 'archivePassword'.tr,
+                                        child: TextFormBox(
+                                          controller: _archivePasswordController,
+                                          obscureText: true,
+                                          placeholder: 'archivePasswordHint'.tr,
+                                        ),
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 30.0),
+                                      child: Checkbox(
+                                        content: Text('deleteAfterExtract'.tr),
+                                        checked: _deleteAfterExtractController.value ?? false,
+                                        onChanged: (bool? value) {
+                                          _deleteAfterExtractController.value = value ?? false;
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
                             ),
                           ),
+
                         if (controller.advancedTabIndex.value == 1)
                           _FormRow(
                             label: 'Trackers',
@@ -539,6 +612,25 @@ class CreateView extends GetView<CreateController> {
         final submitUrl = isWebFileChosen ? controller.fileDataUri.value : _urlController.text.trim();
 
         final urls = Util.textToLines(submitUrl);
+
+        // Check if there is a pending update task (only for single URL)
+        if (urls.length == 1) {
+          final appController = Get.find<AppController>();
+          final pendingTask = appController.pendingUpdateTask.value;
+          if (pendingTask != null) {
+            final shouldUpdate = await _showPendingUpdateDialog(pendingTask.id, pendingTask.name);
+            if (shouldUpdate == true) {
+              // Update the pending task instead of creating a new one
+              await _updatePendingTask(context, pendingTask.id, urls.first);
+              return;
+            } else if (shouldUpdate == null) {
+              // User cancelled, don't create task either
+              return;
+            }
+            // shouldUpdate == false, continue to create new task
+          }
+        }
+
         // Add url to the history
         if (!isWebFileChosen) {
           for (final url in urls) {
@@ -553,6 +645,12 @@ class CreateView extends GetView<CreateController> {
         */
         final isMultiLine = urls.length > 1;
         final isDirect = controller.directDownload.value || isMultiLine;
+        final opt = Options(
+          name: isMultiLine ? "" : _renameController.text,
+          path: _pathController.text,
+          selectFiles: [],
+          extra: parseReqOptsExtra(),
+        );
         if (isDirect) {
           await Future.wait(
             urls.map((url) {
@@ -564,12 +662,7 @@ class CreateView extends GetView<CreateController> {
                     proxy: parseProxy(),
                     skipVerifyCert: _skipVerifyCertController.value,
                   ),
-                  opt: Options(
-                    name: isMultiLine ? "" : _renameController.text,
-                    path: _pathController.text,
-                    selectFiles: [],
-                    extra: parseReqOptsExtra(),
-                  ),
+                  opts: opt,
                 ),
               );
             }),
@@ -577,11 +670,14 @@ class CreateView extends GetView<CreateController> {
           Get.rootDelegate.offNamed(Routes.TASK);
         } else {
           final rr = await resolve(
-            Request(
-              url: submitUrl,
-              extra: parseReqExtra(_urlController.text),
-              proxy: parseProxy(),
-              skipVerifyCert: _skipVerifyCertController.value,
+            ResolveTask(
+              req: Request(
+                url: submitUrl,
+                extra: parseReqExtra(_urlController.text),
+                proxy: parseProxy(),
+                skipVerifyCert: _skipVerifyCertController.value,
+              ),
+              opts: opt,
             ),
           );
           if (context.mounted) await _showResolveDialog(context, rr);
@@ -592,6 +688,63 @@ class CreateView extends GetView<CreateController> {
     } finally {
       _confirmController.stop();
       controller.isConfirming.value = false;
+    }
+  }
+
+  /// Shows a dialog to ask if user wants to update pending task or create new
+  /// Returns true to update, false to create new, null if cancelled
+  Future<bool?> _showPendingUpdateDialog(String taskId, String taskName) async {
+    return showDialog<bool>(
+      context: Get.context!,
+      barrierDismissible: false,
+      builder: (context) => ContentDialog(
+        title: Text('pendingUpdateFound'.tr),
+        content: Text('pendingUpdateConfirm'.trParams({'name': taskName})),
+        actions: [
+          Button(onPressed: () => Navigator.of(context).pop(null), child: Text('cancel'.tr)),
+          Button(onPressed: () => Navigator.of(context).pop(false), child: Text('pendingUpdateNo'.tr)),
+          Button(onPressed: () => Navigator.of(context).pop(true), child: Text('pendingUpdateYes'.tr)),
+        ],
+      ),
+    );
+  }
+
+  /// Updates the pending task with new URL and headers
+  Future<void> _updatePendingTask(BuildContext context, String taskId, String newUrl) async {
+    try {
+      // Build headers from current form
+      final headers = <String, String>{};
+      for (final c in _httpHeaderControllers) {
+        final key = c.name.text.trim();
+        final value = c.value.text.trim();
+        if (key.isNotEmpty) {
+          headers[key] = value;
+        }
+      }
+
+      // Build ReqExtraHttp
+      final reqExtra = ReqExtraHttp(header: headers);
+
+      // Create patch request
+      final patchData = ResolveTask(
+        req: Request(
+          url: newUrl,
+          extra: reqExtra.toJson(),
+          proxy: parseProxy(),
+          skipVerifyCert: _skipVerifyCertController.value,
+        ),
+      );
+
+      await patchTask(taskId, patchData);
+      await continueTask(taskId);
+
+      // Clear pending update state
+      final appController = Get.find<AppController>();
+      appController.pendingUpdateTask.value = null;
+
+      Get.rootDelegate.offNamed(Routes.TASK);
+    } catch (e) {
+      showErrorMessage(context, e);
     }
   }
 
@@ -632,7 +785,11 @@ class CreateView extends GetView<CreateController> {
   Object? parseReqOptsExtra() {
     return OptsExtraHttp()
       ..connections = int.tryParse(_connectionsController.text) ?? 0
-      ..autoTorrent = true;
+      ..autoTorrent = _autoTorrentController.value
+      ..deleteTorrentAfterDownload = _deleteTorrentAfterDownloadController.value
+      ..autoExtract = _autoExtractController.value
+      ..archivePassword = _archivePasswordController.text
+      ..deleteAfterExtract = _deleteAfterExtractController.value ?? false;
   }
 
   String _hitText() {
@@ -687,7 +844,7 @@ class CreateView extends GetView<CreateController> {
                             await createTask(
                               CreateTask(
                                 rid: rr.id,
-                                opt: Options(
+                                opts: Options(
                                   name: _renameController.text,
                                   path: _pathController.text,
                                   selectFiles: controller.selectedIndexes,
@@ -715,6 +872,37 @@ class CreateView extends GetView<CreateController> {
       ),
     );
   }
+
+  Widget? _buildCategorySelector(AppController appController) {
+    final categories = appController.downloaderConfig.value.extra.downloadCategories
+        .where((c) => !c.isDeleted) // Filter out deleted categories
+        .toList();
+    if (categories.isEmpty) return null;
+
+    // Helper to get display name
+    String getCategoryDisplayName(DownloadCategory category) {
+      if (category.nameKey != null && category.nameKey!.isNotEmpty) {
+        return category.nameKey!.tr;
+      }
+      return category.name;
+    }
+
+    return _FormRow(
+      label: 'selectCategory'.tr,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: categories.map((category) {
+          return Button(
+            onPressed: () {
+              _pathController.text = renderPathPlaceholders(category.path);
+            },
+            child: Text(getCategoryDisplayName(category)),
+          );
+        }).toList(),
+      ),
+    );
+  }
 }
 
 class _FormRow extends StatelessWidget {
@@ -729,6 +917,7 @@ class _FormRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       spacing: 12,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         buildFormItemIcon(icon: icon, haveLabel: label != null),
         Expanded(

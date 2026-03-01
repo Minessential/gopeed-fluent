@@ -3,10 +3,13 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:get/get.dart';
 import 'package:gopeed/util/notifications.dart';
+import 'package:gopeed/util/analytics.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'api/api.dart' as api;
@@ -22,37 +25,32 @@ import 'util/package_info.dart';
 import 'util/scheme_register/scheme_register.dart';
 import 'util/util.dart';
 
-class Args {
+class StartupArgs {
   static const flagHidden = "hidden";
 
-  bool hidden = false;
+  /// Command line --hidden flag (for auto-start)
+  bool hiddenFromArgs = false;
 
-  Args();
+  StartupArgs._();
 
-  Args.parse(List<String> args) {
-    final parser = ArgParser();
-    parser.addFlag(flagHidden);
-    final results = parser.parse(args);
-    hidden = results.flag(flagHidden);
+  /// Parse from command line arguments only
+  static StartupArgs parse(List<String> arguments) {
+    final args = StartupArgs._();
+    try {
+      final parser = ArgParser()..addFlag(flagHidden);
+      final results = parser.parse(arguments);
+      args.hiddenFromArgs = results.flag(flagHidden);
+    } catch (e) {
+      // ignore parse errors
+    }
+    return args;
   }
 }
 
 void main(List<String> arguments) async {
-  Args args;
-  // Parse url scheme arguments, e.g. gopeed:?hidden=true
-  // TODO: macos open url handle
-  // TODO: macos updater test
-  if (arguments.firstOrNull?.startsWith("gopeed:") == true) {
-    try {
-      final uri = Uri.parse(arguments.first);
-      args = Args()..hidden = uri.queryParameters["hidden"] == "true";
-    } catch (e) {
-      // ignore
-      args = Args.parse([]);
-    }
-  } else {
-    args = Args.parse(arguments);
-  }
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final args = StartupArgs.parse(arguments);
 
   await init(args);
   onStart();
@@ -60,8 +58,8 @@ void main(List<String> arguments) async {
   runApp(const AppView());
 }
 
-Future<void> init(Args args) async {
-  WidgetsFlutterBinding.ensureInitialized();
+Future<void> init(StartupArgs args) async {
+  // Note: WidgetsFlutterBinding.ensureInitialized() is already called in main()
   if (Util.isMobile()) {
     FlutterForegroundTask.initCommunicationPort();
   }
@@ -96,8 +94,18 @@ Future<void> init(Args args) async {
     }
     await windowManager.ensureInitialized();
     final windowState = Database.instance.getWindowState();
-    windowManager.waitUntilReadyToShow().then((_) async {
-      await windowManager.setTitleBarStyle(TitleBarStyle.hidden, windowButtonVisibility: false);
+
+    // Check if menubar mode is enabled (only for macOS)
+    final runAsMenubarApp =
+        Util.isMacos() && Database.instance.getRunAsMenubarApp();
+
+    final windowOptions = WindowOptions(
+      size: Size(windowState?.width ?? 800, windowState?.height ?? 600),
+      center: true,
+      skipTaskbar: runAsMenubarApp,
+    );
+    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+          await windowManager.setTitleBarStyle(TitleBarStyle.hidden, windowButtonVisibility: false);
       await windowManager.setMinimumSize(const Size(500, 300));
       await windowManager.setSize(Size(windowState?.width ?? 800, windowState?.height ?? 600));
       await windowManager.setAlignment(Alignment.center);
@@ -106,6 +114,22 @@ Future<void> init(Args args) async {
       await windowManager.setSkipTaskbar(false);
       await windowManager.setPreventClose(true);
     });
+
+    // Register Cmd+W hotkey on macOS to close window
+    if (Util.isMacos()) {
+      await hotKeyManager.unregisterAll();
+      HotKey hotKey = HotKey(
+        key: PhysicalKeyboardKey.keyW,
+        modifiers: [HotKeyModifier.meta],
+        scope: HotKeyScope.inapp,
+      );
+      await hotKeyManager.register(
+        hotKey,
+        keyDownHandler: (hotKey) {
+          windowManager.hide();
+        },
+      );
+    }
   }
 
   initLogger();
@@ -116,7 +140,8 @@ Future<void> init(Args args) async {
     logger.e("init package info fail", e);
   }
 
-  final controller = Get.put(AppController());
+  final controller =
+      Get.put(AppController(hiddenFromArgs: args.hiddenFromArgs));
   try {
     await controller.loadStartConfig();
     final startCfg = controller.startConfig.value;
@@ -130,6 +155,16 @@ Future<void> init(Args args) async {
     await controller.loadDownloaderConfig();
   } catch (e) {
     logger.e("load config fail", e);
+  }
+
+  // Auto-start incomplete tasks if enabled
+  if (controller.downloaderConfig.value.extra.autoStartTasks) {
+    try {
+      await api.continueAllTasks(null);
+      logger.i("auto-start tasks completed");
+    } catch (e) {
+      logger.w("auto-start tasks fail", e);
+    }
   }
 
   () async {
@@ -175,5 +210,14 @@ Future<void> onStart() async {
         logger.w("missing language: $lang, keys: $missingKeys");
       }
     });
+  }
+
+  if (Config.isConfigured && Database.instance.getAnalyticsEnabled()) {
+    try {
+      await Analytics.instance.init();
+      await Analytics.instance.logAppOpen();
+    } catch (e) {
+      logger.w("GA4 init failed: $e");
+    }
   }
 }

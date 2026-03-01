@@ -4,10 +4,12 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:app_links/app_links.dart';
+import 'package:dio/dio.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:get/get.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
+import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_handler/share_handler.dart';
 import 'package:tray_manager/tray_manager.dart';
@@ -18,7 +20,9 @@ import 'package:window_manager/window_manager.dart';
 import '../../../../api/api.dart';
 import '../../../../api/model/create_task.dart';
 import '../../../../api/model/downloader_config.dart';
+import '../../../../api/model/install_extension.dart';
 import '../../../../api/model/request.dart';
+import '../../../../api/model/result.dart';
 import '../../../../core/common/start_config.dart';
 import '../../../../core/libgopeed_boot.dart';
 import '../../../../database/database.dart';
@@ -51,17 +55,33 @@ const allTrackerSubscribeUrls = [
   'https://raw.githubusercontent.com/XIU2/TrackersListCollection/master/http.txt',
 ];
 final allTrackerSubscribeUrlCdns = {
-  for (var v in allTrackerSubscribeUrls)
-    v: githubMirrorUrls(v, MirrorType.githubSource),
+  for (var v in allTrackerSubscribeUrls) v: githubMirrorUrls(v, MirrorType.githubSource),
 };
+
+/// Represents a task that is pending URL update via listen mode.
+class PendingUpdateTask {
+  final String id;
+  final String name;
+
+  PendingUpdateTask({required this.id, required this.name});
+}
 
 class AppController extends GetxController with WindowListener, TrayListener {
   static StartConfig? _defaultStartConfig;
+
+  /// Command line --hidden flag passed from main.dart
+  final bool hiddenFromArgs;
+
+  AppController({this.hiddenFromArgs = false});
 
   final autoStartup = false.obs;
   final startConfig = StartConfig().obs;
   final runningPort = 0.obs;
   final downloaderConfig = DownloaderConfig().obs;
+
+  /// The task that is pending URL update via listen mode.
+  /// Stored here in AppController to persist across page navigations.
+  final pendingUpdateTask = Rxn<PendingUpdateTask>();
 
   HttpConfig get httpConfig => downloaderConfig.value.protocolConfig.http;
   BtConfig get btConfig => downloaderConfig.value.protocolConfig.bt;
@@ -74,41 +94,21 @@ class AppController extends GetxController with WindowListener, TrayListener {
   void onReady() {
     super.onReady();
 
-    _initDeepLinks().onError(
-      (error, stackTrace) => logger.w("initDeepLinks error", error, stackTrace),
-    );
+    _initDeepLinks().onError((error, stackTrace) => logger.w("initDeepLinks error", error, stackTrace));
 
-    _initWindows().onError(
-      (error, stackTrace) => logger.w("initWindows error", error, stackTrace),
-    );
+    _initWindows().onError((error, stackTrace) => logger.w("initWindows error", error, stackTrace));
 
-    _initTray().onError(
-      (error, stackTrace) => logger.w("initTray error", error, stackTrace),
-    );
+    _initTray().onError((error, stackTrace) => logger.w("initTray error", error, stackTrace));
 
-    _initRpcServer().onError(
-      (error, stackTrace) => logger.w("initRpcServer error", error, stackTrace),
-    );
+    _initRpcServer().onError((error, stackTrace) => logger.w("initRpcServer error", error, stackTrace));
 
-    _initForegroundTask().onError(
-      (error, stackTrace) =>
-          logger.w("initForegroundTask error", error, stackTrace),
-    );
+    _initForegroundTask().onError((error, stackTrace) => logger.w("initForegroundTask error", error, stackTrace));
 
-    _initTrackerUpdate().onError(
-      (error, stackTrace) =>
-          logger.w("initTrackerUpdate error", error, stackTrace),
-    );
+    _initTrackerUpdate().onError((error, stackTrace) => logger.w("initTrackerUpdate error", error, stackTrace));
 
-    _initLaunchAtStartup().onError(
-      (error, stackTrace) =>
-          logger.w("initLaunchAtStartup error", error, stackTrace),
-    );
+    _initLaunchAtStartup().onError((error, stackTrace) => logger.w("initLaunchAtStartup error", error, stackTrace));
 
-    _initCheckUpdate().onError(
-      (error, stackTrace) =>
-          logger.w("initCheckUpdate error", error, stackTrace),
-    );
+    _initCheckUpdate().onError((error, stackTrace) => logger.w("initCheckUpdate error", error, stackTrace));
   }
 
   @override
@@ -130,6 +130,9 @@ class AppController extends GetxController with WindowListener, TrayListener {
   @override
   void onWindowFocus() {
     refresh();
+    if (Util.isMacos() && Database.instance.getRunAsMenubarApp()) {
+      windowManager.setSkipTaskbar(true);
+    }
   }
 
   @override
@@ -154,9 +157,7 @@ class AppController extends GetxController with WindowListener, TrayListener {
 
   final _windowsResizeSave = Util.debounce(() async {
     final size = await windowManager.getSize();
-    Database.instance.saveWindowState(
-      WindowStateEntity(width: size.width, height: size.height),
-    );
+    Database.instance.saveWindowState(WindowStateEntity(width: size.width, height: size.height));
   }, 500);
 
   @override
@@ -166,24 +167,44 @@ class AppController extends GetxController with WindowListener, TrayListener {
 
   Future<void> _initDeepLinks() async {
     if (Util.isWeb()) {
+      // For web, just show windo w
       return;
     }
 
     // Handle deep link
-    () async {
-      _appLinks = AppLinks();
+    _appLinks = AppLinks();
 
-      // Handle link when app is in warm state (front or background)
-      _linkSubscription = _appLinks.uriLinkStream.listen((uri) async {
-        await _handleDeepLink(uri);
-      });
+    // Handle link when app is in warm state (front or background)
+    _linkSubscription = _appLinks.uriLinkStream.listen((uri) async {
+      await _handleDeepLink(uri);
+    });
 
-      // Check initial link if app was in cold state (terminated)
-      final uri = await _appLinks.getInitialLink();
-      if (uri != null) {
-        await _handleDeepLink(uri);
-      }
-    }();
+    // Get initial link for cold start - this works after runApp()
+    Uri? initialLink;
+    try {
+      initialLink = await _appLinks.getInitialLink();
+    } catch (e) {
+      // ignore errors
+    }
+
+    // Determine if window should be hidden
+    // Priority 1: gopeed: URL scheme hidden parameter
+    // Priority 2: Command line --hidden flag
+    bool shouldHide = hiddenFromArgs;
+    if (initialLink?.scheme == "gopeed") {
+      shouldHide = initialLink!.queryParameters["hidden"] == "true";
+    }
+
+    // Show window if not hidden (desktop only)
+    if (Util.isDesktop() && !shouldHide) {
+      await windowManager.show();
+      await windowManager.focus();
+    }
+
+    // Handle initial link for deep link navigation
+    if (initialLink != null) {
+      _handleDeepLink(initialLink);
+    }
 
     // Handle shared media, e.g. shared link from browser
     if (Util.isMobile()) {
@@ -222,22 +243,15 @@ class AppController extends GetxController with WindowListener, TrayListener {
     if (Util.isWindows()) {
       await trayManager.setIcon('assets/tray_icon/icon.ico');
     } else if (Util.isMacos()) {
-      await trayManager.setIcon(
-        'assets/tray_icon/icon_mac.png',
-        isTemplate: true,
-      );
-    } else if (Platform.environment.containsKey('FLATPAK_ID') ||
-        Platform.environment.containsKey('SNAP')) {
+      await trayManager.setIcon('assets/tray_icon/icon_mac.png', isTemplate: true);
+    } else if (Platform.environment.containsKey('FLATPAK_ID') || Platform.environment.containsKey('SNAP')) {
       await trayManager.setIcon('com.gopeed.Gopeed');
     } else {
       await trayManager.setIcon('assets/tray_icon/icon.png');
     }
     final menu = Menu(
       items: [
-        MenuItem(
-          label: "show".tr,
-          onClick: (menuItem) async => {await windowManager.show()},
-        ),
+        MenuItem(label: "show".tr, onClick: (menuItem) async => {await windowManager.show()}),
         MenuItem.separator(),
         MenuItem(
           label: "create".tr,
@@ -246,14 +260,8 @@ class AppController extends GetxController with WindowListener, TrayListener {
             await Get.rootDelegate.offAndToNamed(Routes.CREATE),
           },
         ),
-        MenuItem(
-          label: "startAll".tr,
-          onClick: (menuItem) async => {continueAllTasks(null)},
-        ),
-        MenuItem(
-          label: "pauseAll".tr,
-          onClick: (menuItem) async => {pauseAllTasks(null)},
-        ),
+        MenuItem(label: "startAll".tr, onClick: (menuItem) async => {continueAllTasks(null)}),
+        MenuItem(label: "pauseAll".tr, onClick: (menuItem) async => {pauseAllTasks(null)}),
         MenuItem(
           label: 'setting'.tr,
           onClick: (menuItem) async => {
@@ -265,10 +273,7 @@ class AppController extends GetxController with WindowListener, TrayListener {
         MenuItem(
           label: 'donate'.tr,
           onClick: (menuItem) => {
-            launchUrl(
-              Uri.parse("https://docs.gopeed.com/donate.html"),
-              mode: LaunchMode.externalApplication,
-            ),
+            launchUrl(Uri.parse("https://docs.gopeed.com/donate.html"), mode: LaunchMode.externalApplication),
           },
         ),
         MenuItem(label: '${"version".tr}（${packageInfo.version}）'),
@@ -301,24 +306,41 @@ class AppController extends GetxController with WindowListener, TrayListener {
     try {
       await startRpcServer({
         "/create": (ctx) async {
-          final meta =
-              ctx.request.headers["X-Gopeed-Host-Meta"]?.firstOrNull ?? "{}";
+          final meta = ctx.request.headers["X-Gopeed-Host-Meta"]?.firstOrNull ?? "{}";
           final jsonMeta = jsonDecode(meta);
           final silent = jsonMeta['silent'] as bool? ?? false;
           final params = await ctx.readText();
-          final createTaskParams = _decodeToCreatTaskParams(params);
-          if (!silent) {
+          final createTaskParams = CreateTask.fromJson(_decodeParams(params));
+          if (!silent || pendingUpdateTask.value != null) {
             await windowManager.show();
             _handleToCreate0(createTaskParams);
           } else {
             try {
               await createTask(createTaskParams);
             } catch (e) {
-              logger.w(
-                "create task from extension fail",
-                e,
-                StackTrace.current,
-              );
+              logger.w("create task from extension fail", e, StackTrace.current);
+            }
+          }
+        },
+        "/forward": (ctx) async {
+          try {
+            final body = await ctx.readJSON();
+            final method = (body['method'] as String?)?.toUpperCase() ?? 'GET';
+            final path = (body['path'] as String?) ?? "/";
+            final data = body['data'];
+            final query = body['query'] as Map<String, dynamic>?;
+
+            // Forward request to gopeed REST API
+            final response = await forward(path, method: method, data: data, queryParameters: query);
+
+            // Return raw response
+            await ctx.writeJSON(response.data);
+          } catch (e) {
+            if (e is DioException && e.response != null) {
+              // Return API error response
+              await ctx.writeJSON(e.response!.data);
+            } else {
+              await ctx.writeJSON(Result(code: 1, msg: e.toString()).toJson());
             }
           }
         },
@@ -341,10 +363,7 @@ class AppController extends GetxController with WindowListener, TrayListener {
         showWhen: true,
         priority: NotificationPriority.LOW,
       ),
-      iosNotificationOptions: const IOSNotificationOptions(
-        showNotification: true,
-        playSound: false,
-      ),
+      iosNotificationOptions: const IOSNotificationOptions(showNotification: true, playSound: false),
       foregroundTaskOptions: const ForegroundTaskOptions(
         interval: 5000,
         autoRunOnBoot: true,
@@ -369,6 +388,7 @@ class AppController extends GetxController with WindowListener, TrayListener {
 
   Future<void> _handleDeepLink(Uri uri) async {
     if (uri.scheme == "gopeed") {
+      // gopeed:///create?params=eyJyZXEiOnsidXJsIjoiaHR0cHM6Ly9leGFtcGxlLmNvbS9maWxlLnR4dCJ9fQ==
       if (uri.path == "/create") {
         final params = uri.queryParameters["params"];
         if (params?.isNotEmpty == true) {
@@ -378,19 +398,25 @@ class AppController extends GetxController with WindowListener, TrayListener {
         Get.rootDelegate.offAndToNamed(Routes.CREATE);
         return;
       }
+      // gopeed:///extension?params=eyJ1cmwiOiJodHRwczovL2dpdGh1Yi5jb20vbW9ua2V5V2llL2dvcGVlZC1leHRlbnNpb24tYmlsaWJpbGkiLCJkZXZNb2RlIjpmYWxzZX0=
+      if (uri.path == "/extension") {
+        final params = uri.queryParameters["params"];
+        if (params?.isNotEmpty == true) {
+          _handleToExtension(params!);
+          return;
+        }
+        Get.rootDelegate.offAndToNamed(Routes.EXTENSION);
+        return;
+      }
       Get.rootDelegate.offAndToNamed(Routes.HOME);
       return;
     }
 
     String path;
-    if (uri.scheme == "magnet" ||
-        uri.scheme == "http" ||
-        uri.scheme == "https") {
+    if (uri.scheme == "magnet" || uri.scheme == "http" || uri.scheme == "https") {
       path = uri.toString();
     } else if (uri.scheme == "file") {
-      path = Util.isWindows()
-          ? Uri.decodeFull(uri.path.substring(1))
-          : uri.path;
+      path = Util.isWindows() ? Uri.decodeFull(uri.path.substring(1)) : uri.path;
     } else {
       path = (await toFile(uri.toString())).path;
     }
@@ -421,8 +447,7 @@ class AppController extends GetxController with WindowListener, TrayListener {
       _defaultStartConfig!.address = "127.0.0.1:0";
     } else {
       _defaultStartConfig!.network = "unix";
-      _defaultStartConfig!.address =
-          "${(await getTemporaryDirectory()).path}/$unixSocketPath";
+      _defaultStartConfig!.address = "${(await getTemporaryDirectory()).path}/$unixSocketPath";
     }
     _defaultStartConfig!.apiToken = '';
     return _defaultStartConfig!;
@@ -457,9 +482,7 @@ class AppController extends GetxController with WindowListener, TrayListener {
         continue;
       }
       try {
-        final trackers = await Util.anyOk(
-          cdns.map((cdn) => _fetchTrackers(cdn)),
-        );
+        final trackers = await Util.anyOk(cdns.map((cdn) => _fetchTrackers(cdn)));
         result.addAll(trackers);
       } catch (e) {
         logger.w("subscribe trackers fail, url: $u", e);
@@ -491,8 +514,7 @@ class AppController extends GetxController with WindowListener, TrayListener {
     final lastUpdateTime = btExtConfig.lastTrackerUpdateTime;
     // if last update time is null or more than 1 day, update trackers
     if (btExtConfig.autoUpdateTrackers &&
-        (lastUpdateTime == null ||
-            lastUpdateTime.difference(DateTime.now()).inDays < 0)) {
+        (lastUpdateTime == null || lastUpdateTime.difference(DateTime.now()).inDays < 0)) {
       try {
         await trackerUpdate();
       } catch (e) {
@@ -504,9 +526,7 @@ class AppController extends GetxController with WindowListener, TrayListener {
   Future<List<String>> _fetchTrackers(String subscribeUrl) async {
     final resp = await proxyRequest(subscribeUrl);
     if (resp.statusCode != 200) {
-      throw Exception(
-        'Failed to get trackers, status code: ${resp.statusCode}',
-      );
+      throw Exception('Failed to get trackers, status code: ${resp.statusCode}');
     }
     if (resp.data == null || resp.data!.isEmpty) {
       throw Exception('Failed to get trackers, data is null');
@@ -523,14 +543,13 @@ class AppController extends GetxController with WindowListener, TrayListener {
     }
     if (extra.locale.isEmpty) {
       final systemLocale = getLocaleKey(PlatformDispatcher.instance.locale);
-      extra.locale = messages.keys.containsKey(systemLocale)
-          ? systemLocale
-          : getLocaleKey(fallbackLocale);
+      extra.locale = messages.keys.containsKey(systemLocale) ? systemLocale : getLocaleKey(fallbackLocale);
     }
     if (extra.bt.trackerSubscribeUrls.isEmpty) {
       // default select all tracker subscribe urls
       extra.bt.trackerSubscribeUrls.addAll(allTrackerSubscribeUrls);
     }
+
     final proxy = config.proxy;
     if (proxy.scheme.isEmpty) {
       proxy.scheme = 'http';
@@ -541,14 +560,52 @@ class AppController extends GetxController with WindowListener, TrayListener {
         config.downloadDir = (await getDownloadsDirectory())?.path ?? "./";
       } else if (Util.isAndroid()) {
         config.downloadDir =
-            (await getExternalStorageDirectory())?.path ??
-            (await getApplicationDocumentsDirectory()).path;
+            (await getExternalStorageDirectory())?.path ?? (await getApplicationDocumentsDirectory()).path;
       } else if (Util.isIOS()) {
         config.downloadDir = (await getApplicationDocumentsDirectory()).path;
       } else {
         config.downloadDir = './';
       }
     }
+
+    // Initialize default download categories if empty
+    if (extra.downloadCategories.isEmpty) {
+      _initDefaultDownloadCategories();
+    }
+
+    // Initialize default GitHub mirrors if empty
+    if (extra.githubMirror.mirrors.isEmpty) {
+      _initDefaultGithubMirrors();
+    }
+  }
+
+  void _initDefaultDownloadCategories() {
+    final extra = downloaderConfig.value.extra;
+    final downloadDir = downloaderConfig.value.downloadDir;
+
+    // Add default built-in categories with i18n keys
+    // No need to set initial name value, it will be retrieved via nameKey
+    extra.downloadCategories = [
+      DownloadCategory(name: '', path: path.join(downloadDir, 'Music'), isBuiltIn: true, nameKey: 'categoryMusic'),
+      DownloadCategory(name: '', path: path.join(downloadDir, 'Video'), isBuiltIn: true, nameKey: 'categoryVideo'),
+      DownloadCategory(
+        name: '',
+        path: path.join(downloadDir, 'Document'),
+        isBuiltIn: true,
+        nameKey: 'categoryDocument',
+      ),
+      DownloadCategory(name: '', path: path.join(downloadDir, 'Program'), isBuiltIn: true, nameKey: 'categoryProgram'),
+    ];
+  }
+
+  void _initDefaultGithubMirrors() {
+    final extra = downloaderConfig.value.extra;
+
+    // Add default built-in GitHub mirrors
+    extra.githubMirror.mirrors = [
+      GithubMirror(type: GithubMirrorType.jsdelivr, url: 'https://fastly.jsdelivr.net/gh', isBuiltIn: true),
+      GithubMirror(type: GithubMirrorType.ghProxy, url: 'https://fastgit.cc', isBuiltIn: true),
+    ];
   }
 
   Future<void> _initLaunchAtStartup() async {
@@ -558,7 +615,7 @@ class AppController extends GetxController with WindowListener, TrayListener {
     launchAtStartup.setup(
       appName: packageInfo.appName,
       appPath: Platform.resolvedExecutable,
-      args: ['--${Args.flagHidden}'],
+      args: ['--${StartupArgs.flagHidden}'],
     );
     autoStartup.value = await launchAtStartup.isEnabled();
   }
@@ -586,16 +643,14 @@ class AppController extends GetxController with WindowListener, TrayListener {
     await putConfig(downloaderConfig.value);
   }
 
-  CreateTask _decodeToCreatTaskParams(String params) {
+  Map<String, dynamic> _decodeParams(String params) {
     final safeParams = params.replaceAll('"', "").replaceAll(" ", "+");
-    final paramsJson = String.fromCharCodes(
-      base64Decode(base64.normalize(safeParams)),
-    );
-    return CreateTask.fromJson(jsonDecode(paramsJson));
+    final paramsJson = String.fromCharCodes(base64Decode(base64.normalize(safeParams)));
+    return jsonDecode(paramsJson);
   }
 
   _handleToCreate(String params) {
-    final createTaskParams = _decodeToCreatTaskParams(params);
+    final createTaskParams = CreateTask.fromJson(_decodeParams(params));
     _handleToCreate0(createTaskParams);
   }
 
@@ -603,6 +658,14 @@ class AppController extends GetxController with WindowListener, TrayListener {
     Get.rootDelegate.offAndToNamed(
       Routes.REDIRECT,
       arguments: RedirectArgs(Routes.CREATE, arguments: createTaskParams),
+    );
+  }
+
+  _handleToExtension(String params) {
+    final installExtension = InstallExtension.fromJson(_decodeParams(params));
+    Get.rootDelegate.offAndToNamed(
+      Routes.REDIRECT,
+      arguments: RedirectArgs(Routes.EXTENSION, arguments: installExtension),
     );
   }
 }
