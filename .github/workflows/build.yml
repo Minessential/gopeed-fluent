@@ -15,7 +15,7 @@ on:
 env:
   GO_VERSION: "1.24"
   FLUTTER_CHANNEL: "master"
-  FLUTTER_VERSION: "80f4a0f251b" # tag, commit or branch
+  FLUTTER_VERSION: "7e1c8868" # tag, commit or branch
 
 permissions:
   contents: write
