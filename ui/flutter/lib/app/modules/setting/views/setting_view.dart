@@ -408,6 +408,27 @@ class SettingView extends GetView<SettingController> {
       );
     }
 
+    Widget? buildDesktopNotification() {
+      if (!Util.isDesktop()) return null;
+      return _SettingItem(
+        icon: FluentIcons.alert_24_regular,
+        title: 'desktopNotification'.tr,
+        trailing: Obx(
+          () => ToggleSwitch(
+            content: Text(appController.downloaderConfig.value.extra.desktopNotification ? 'on'.tr : 'off'.tr),
+            leadingContent: true,
+            checked: appController.downloaderConfig.value.extra.desktopNotification,
+            onChanged: (bool value) async {
+              appController.downloaderConfig.update((val) {
+                val!.extra.desktopNotification = value;
+              });
+              await debounceSave();
+            },
+          ),
+        ),
+      );
+    }
+
     // Archive auto extract configuration
     Widget buildAutoExtract() {
       return _SettingItem(
@@ -1461,6 +1482,7 @@ class SettingView extends GetView<SettingController> {
             buildBrowserExtension(),
             ?buildAutoStartup(),
             ?buildMenubarMode(),
+            ?buildDesktopNotification(),
           ],
         ),
         _SettingSection(

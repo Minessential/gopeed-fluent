@@ -171,8 +171,6 @@ const zhCN = {
     'httpHeader': '请求头',
     'httpHeaderName': '请求头名称',
     'httpHeaderValue': '请求头值',
-    'notificationDownloaded': '下载完成',
-    'notificationError': '下载错误',
     'login': '登录',
     'username_required': '请输入用户名',
     'password_required': '请输入密码',
@@ -211,5 +209,8 @@ const zhCN = {
     'pendingUpdateConfirm': '任务 "@name" 正在等待更新地址，是否使用新地址更新该任务？',
     'pendingUpdateYes': '更新任务',
     'pendingUpdateNo': '创建新任务',
+    'desktopNotification': '桌面通知',
+    'notificationTaskDone': '任务完成',
+    'notificationTaskError': '任务失败',
   },
 };

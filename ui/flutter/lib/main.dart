@@ -1,13 +1,9 @@
-import 'dart:io';
-
 import 'package:args/args.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:get/get.dart';
-import 'package:gopeed/util/notifications.dart';
 import 'package:gopeed/util/analytics.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:window_manager/window_manager.dart';
@@ -65,33 +61,7 @@ Future<void> init(StartupArgs args) async {
   }
   await Util.initStorageDir();
   await Database.instance.init();
-  ///TODO Msix Pack
   if (Util.isDesktop()) {
-    if (Platform.isWindows) {
-      const initializationSettings = InitializationSettings(
-        windows: WindowsInitializationSettings(
-          appName: 'Gopeed(Fluent)',
-          appUserModelId: 'Mine.Gopeed.Fluent',
-          guid: '0197064E-A982-7D4A-8AAA-B3F15AF86E60',
-        ),
-      );
-      await flutterLocalNotificationsPlugin.initialize(
-        initializationSettings,
-        // onDidReceiveNotificationResponse: selectNotificationStream.add,
-        // onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
-      );
-
-      // final NotificationAppLaunchDetails? notificationAppLaunchDetails = !kIsWeb &&
-      //         Platform.isLinux
-      //     ? null
-      //     : await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
-      // String initialRoute = HomePage.routeName;
-      // if (notificationAppLaunchDetails?.didNotificationLaunchApp ?? false) {
-      //   selectedNotificationPayload =
-      //       notificationAppLaunchDetails!.notificationResponse?.payload;
-      //   initialRoute = SecondPage.routeName;
-      // }
-    }
     await windowManager.ensureInitialized();
     final windowState = Database.instance.getWindowState();
 

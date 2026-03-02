@@ -38,6 +38,7 @@ import '../../../../util/util.dart';
 import '../../../routes/app_pages.dart';
 import '../../../rpc/rpc.dart';
 import '../../redirect/views/redirect_view.dart';
+import '../../../services/notification_service.dart';
 
 const unixSocketPath = 'gopeed.sock';
 
@@ -97,6 +98,8 @@ class AppController extends GetxController with WindowListener, TrayListener {
     _initDeepLinks().onError((error, stackTrace) => logger.w("initDeepLinks error", error, stackTrace));
 
     _initWindows().onError((error, stackTrace) => logger.w("initWindows error", error, stackTrace));
+
+    if (Util.isDesktop()) Get.put(NotificationService());
 
     _initTray().onError((error, stackTrace) => logger.w("initTray error", error, stackTrace));
 

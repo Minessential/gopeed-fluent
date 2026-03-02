@@ -172,8 +172,6 @@ const enUS = {
     'httpHeader': 'Header',
     'httpHeaderName': 'Header Name',
     'httpHeaderValue': 'Header Value',
-    'notificationDownloaded': 'Download Completed',
-    'notificationError': 'Download Error',
     'login': 'Login',
     'username_required': 'Please enter your username',
     'password_required': 'Please enter your password',
@@ -213,5 +211,8 @@ const enUS = {
         'Task "@name" is waiting for URL update. Do you want to update it with the new URL?',
     'pendingUpdateYes': 'Update Task',
     'pendingUpdateNo': 'Create New Task',
+    'desktopNotification': 'Desktop Notifications',
+    'notificationTaskDone': 'Task completed',
+    'notificationTaskError': 'Task error',
   },
 };
