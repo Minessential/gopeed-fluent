@@ -97,8 +97,14 @@ jobs:
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
             $version = "${{ inputs.version }}"
           } else {
-            $raw = "${{ needs.release.outputs.tag_name }}"
-            $version = $raw -replace '^v', ''
+            # Extract tag from github.ref (refs/tags/v1.2.3 -> v1.2.3)
+            $ref = "${{ github.ref }}"
+            if ($ref -match "^refs/tags/(.+)$") {
+              $raw = $matches[1]
+              $version = $raw -replace '^v', ''
+            } else {
+              Write-Error "No valid tag found in $ref"
+            }
           }
           if (-not $version) { Write-Error "VERSION is empty" }
           echo "VERSION=$version" >> $env:GITHUB_ENV
