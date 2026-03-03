@@ -148,6 +148,8 @@ jobs:
           #define MyAppURL "https://github.com/Minessential/gopeed-fluent"
           #define MyAppExeName "gopeed.exe"
           #define Architectures "${{ matrix.arch }}"
+          #define AppUserModelID "Mine.Gopeed.Fluent"
+          #define AppUserModelToastActivatorCLSID "0197064E-A982-7D4A-8AAA-B3F15AF86E60"
           [CustomMessages]
           english.DeleteUserData=Would you like to delete all user data and settings?%n(Located in %APPDATA%\Gopeed(Fluent) folder)
           chinesesimplified.DeleteUserData=是否同时删除所有用户数据和设置？%n(位于 %APPDATA%\Gopeed(Fluent) 文件夹)
@@ -240,8 +242,8 @@ jobs:
             end;
           end;
           [Icons]
-          Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-          Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+          Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}";  AppUserModelID: "{#AppUserModelID}"; AppUserModelToastActivatorCLSID: "{#AppUserModelToastActivatorCLSID}"
+          Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; AppUserModelID: "{#AppUserModelID}"; AppUserModelToastActivatorCLSID: "{#AppUserModelToastActivatorCLSID}"
           [Run]
           Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
           "@ > setup.iss
