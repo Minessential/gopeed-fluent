@@ -31,6 +31,8 @@ const (
 	bucketTask = "task"
 	// task download data bucket
 	bucketSave = "save"
+	// protocol-level shared client state bucket
+	bucketProtocolState = "protocol_state"
 	// downloader config bucket
 	bucketConfig = "config"
 	// downloader extension bucket
@@ -141,7 +143,7 @@ func NewDownloader(cfg *DownloaderConfig) *Downloader {
 
 func (d *Downloader) Setup() error {
 	// setup storage
-	if err := d.storage.Setup([]string{bucketTask, bucketSave, bucketConfig, bucketExtension, bucketExtensionStorage}); err != nil {
+	if err := d.storage.Setup([]string{bucketTask, bucketSave, bucketProtocolState, bucketConfig, bucketExtension, bucketExtensionStorage}); err != nil {
 		return err
 	}
 	// load config from storage
@@ -164,6 +166,12 @@ func (d *Downloader) Setup() error {
 		protocol := fm.Name()
 		if _, ok := d.cfg.DownloaderStoreConfig.ProtocolConfig[protocol]; !ok {
 			d.cfg.DownloaderStoreConfig.ProtocolConfig[protocol] = fm.DefaultConfig()
+		}
+		if sfm, ok := fm.(fetcher.StatefulFetcherManager); ok {
+			sfm.SetStateStore(&protocolStateStore{
+				storage:  d.storage,
+				protocol: protocol,
+			})
 		}
 	}
 
@@ -358,9 +366,16 @@ func (d *Downloader) saveTask(task *Task) error {
 		d.Logger.Error().Stack().Err(err).Msgf("serialize fetcher failed: %s", task.ID)
 		return err
 	}
-	if err := d.storage.Put(bucketSave, task.ID, data); err != nil {
-		d.Logger.Error().Stack().Err(err).Msgf("persist fetcher failed: %s", task.ID)
-		return err
+	if data != nil {
+		if err := d.storage.Put(bucketSave, task.ID, data); err != nil {
+			d.Logger.Error().Stack().Err(err).Msgf("persist fetcher failed: %s", task.ID)
+			return err
+		}
+	} else {
+		if err := d.storage.Delete(bucketSave, task.ID); err != nil {
+			d.Logger.Error().Stack().Err(err).Msgf("clear fetcher state failed: %s", task.ID)
+			return err
+		}
 	}
 	if err := d.storage.Put(bucketTask, task.ID, task); err != nil {
 		d.Logger.Error().Stack().Err(err).Msgf("persist task failed: %s", task.ID)
@@ -820,6 +835,26 @@ func (d *Downloader) Clear() error {
 	return nil
 }
 
+type protocolStateStore struct {
+	storage  Storage
+	protocol string
+}
+
+func (s *protocolStateStore) Load(v any) (bool, error) {
+	return s.storage.Get(bucketProtocolState, s.protocol, v)
+}
+
+func (s *protocolStateStore) Save(v any) error {
+	if v == nil {
+		return s.Delete()
+	}
+	return s.storage.Put(bucketProtocolState, s.protocol, v)
+}
+
+func (s *protocolStateStore) Delete() error {
+	return s.storage.Delete(bucketProtocolState, s.protocol)
+}
+
 func (d *Downloader) Listener(fn Listener) {
 	d.listener = fn
 }
@@ -1186,7 +1221,7 @@ func (d *Downloader) statusMut(task *Task, fn func() (bool, error)) (bool, error
 }
 
 func (d *Downloader) doStart(task *Task) (err error) {
-	var isCreate bool
+	var needCreate bool
 	isReturn, err := d.statusMut(task, func() (isReturn bool, err error) {
 		if task.Status == base.DownloadStatusRunning || task.Status == base.DownloadStatusDone {
 			isReturn = true
@@ -1198,7 +1233,7 @@ func (d *Downloader) doStart(task *Task) (err error) {
 			d.Logger.Error().Stack().Err(err).Msgf("restore fetcher failed, task id: %s", task.ID)
 			return
 		}
-		isCreate = task.Status == base.DownloadStatusReady
+		needCreate = !task.IsCreated
 		task.updateStatus(base.DownloadStatusRunning)
 
 		return
@@ -1224,7 +1259,7 @@ func (d *Downloader) doStart(task *Task) (err error) {
 			task.Meta.Res = task.fetcher.Meta().Res
 		}
 
-		if isCreate {
+		if needCreate {
 			if task.fetcherManager.AutoRename() {
 				d.checkDuplicateLock.Lock()
 				defer d.checkDuplicateLock.Unlock()
@@ -1248,10 +1283,9 @@ func (d *Downloader) doStart(task *Task) (err error) {
 					task.Meta.Opts.Name = newName
 				}
 			}
-
+			task.IsCreated = true
 			task.Meta.Res.CalcSize(task.Meta.Opts.SelectFiles)
 		}
-
 		task.Progress.Speed = 0
 		task.timer.Start()
 		if err := task.fetcher.Start(); err != nil {
@@ -1300,8 +1334,14 @@ func (d *Downloader) doPause(task *Task) (err error) {
 				return err
 			}
 		}
-		if err := d.storage.Put(bucketTask, task.ID, task.clone()); err != nil {
-			return err
+		if task.fetcherManager != nil && task.fetcher != nil {
+			if err := d.saveTask(task); err != nil {
+				return err
+			}
+		} else {
+			if err := d.storage.Put(bucketTask, task.ID, task.clone()); err != nil {
+				return err
+			}
 		}
 		d.emit(EventKeyPause, task)
 		return nil

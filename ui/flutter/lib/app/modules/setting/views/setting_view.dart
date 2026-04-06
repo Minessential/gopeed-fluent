@@ -749,6 +749,134 @@ class SettingView extends GetView<SettingController> {
       );
     }
 
+    // ed2k config items start
+    final ed2kConfig = downloaderCfg.value.protocolConfig.ed2k;
+    List<String> parseEd2kEntries(String value) {
+      return value.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    }
+
+    String summarizeEd2kEntries(String value) {
+      final entries = parseEd2kEntries(value);
+      if (entries.isEmpty) {
+        return 'notSet'.tr;
+      }
+      return 'items'.trParams({'count': entries.length.toString()});
+    }
+
+    String formatEd2kMultilineValue(String value) {
+      return parseEd2kEntries(value).join('\r\n');
+    }
+
+    final buildEd2kListenPort = _buildConfigItem(
+      FluentIcons.router_24_regular,
+      'ed2kTcpPort',
+      trailing: Obx(() => Text(downloaderCfg.value.protocolConfig.ed2k.listenPort.toString())),
+      keyBuilder: (Key key) {
+        final controller = TextEditingController(text: ed2kConfig.listenPort.toString());
+        controller.addListener(() async {
+          if (controller.text.isNotEmpty && controller.text != ed2kConfig.listenPort.toString()) {
+            downloaderCfg.update((val) => val!.protocolConfig.ed2k.listenPort = int.parse(controller.text));
+            await debounceSave();
+          }
+        });
+
+        return TextBox(
+          key: key,
+          focusNode: FocusNode(),
+          controller: controller,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly, NumericalRangeFormatter(min: 0, max: 65535)],
+        );
+      },
+    );
+
+    final buildEd2kUdpPort = _buildConfigItem(
+      FluentIcons.router_24_regular,
+      'ed2kUdpPort',
+      trailing: Obx(() => Text(downloaderCfg.value.protocolConfig.ed2k.udpPort.toString())),
+      keyBuilder: (Key key) {
+        final controller = TextEditingController(text: ed2kConfig.udpPort.toString());
+        controller.addListener(() async {
+          if (controller.text.isNotEmpty && controller.text != ed2kConfig.udpPort.toString()) {
+            downloaderCfg.update((val) => val!.protocolConfig.ed2k.udpPort = int.parse(controller.text));
+            await debounceSave();
+          }
+        });
+
+        return TextBox(
+          key: key,
+          focusNode: FocusNode(),
+          controller: controller,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly, NumericalRangeFormatter(min: 0, max: 65535)],
+        );
+      },
+    );
+
+    final buildEd2kServerAddr = _buildConfigItem(
+      FluentIcons.cloud_link_24_regular,
+      'ed2kServerList',
+      subWidget: Text('ed2kOnePerLine'.tr),
+      trailing: Obx(() => Text(summarizeEd2kEntries(downloaderCfg.value.protocolConfig.ed2k.serverAddr))),
+      keyBuilder: (Key key) {
+        final controller = TextEditingController(text: formatEd2kMultilineValue(ed2kConfig.serverAddr));
+        return TextBox(
+          key: key,
+          focusNode: FocusNode(),
+          controller: controller,
+          keyboardType: TextInputType.multiline,
+          maxLines: 5,
+          placeholder: 'ed2kServersHint'.tr,
+          onChanged: (value) async {
+            downloaderCfg.update((val) => val!.protocolConfig.ed2k.serverAddr = Util.textToLines(value).join(','));
+            await debounceSave();
+          },
+        );
+      },
+    );
+    final buildEd2kServerMet = _buildConfigItem(
+      FluentIcons.cloud_link_24_regular,
+      'ed2kServerMet',
+      subWidget: Text('ed2kOnePerLine'.tr),
+      trailing: Obx(() => Text(summarizeEd2kEntries(downloaderCfg.value.protocolConfig.ed2k.serverMet))),
+      keyBuilder: (Key key) {
+        final controller = TextEditingController(text: formatEd2kMultilineValue(ed2kConfig.serverMet));
+        return TextBox(
+          key: key,
+          focusNode: FocusNode(),
+          controller: controller,
+          keyboardType: TextInputType.multiline,
+          maxLines: 4,
+          placeholder: 'ed2kServerMetHint'.tr,
+          onChanged: (value) async {
+            downloaderCfg.update((val) => val!.protocolConfig.ed2k.serverMet = Util.textToLines(value).join(','));
+            await debounceSave();
+          },
+        );
+      },
+    );
+    final buildEd2kNodesDat = _buildConfigItem(
+      FluentIcons.cloud_link_24_regular,
+      'ed2kNodesDat',
+      subWidget: Text('ed2kOnePerLine'.tr),
+      trailing: Obx(() => Text(summarizeEd2kEntries(downloaderCfg.value.protocolConfig.ed2k.nodesDat))),
+      keyBuilder: (Key key) {
+        final controller = TextEditingController(text: formatEd2kMultilineValue(ed2kConfig.nodesDat));
+        return TextBox(
+          key: key,
+          focusNode: FocusNode(),
+          controller: controller,
+          keyboardType: TextInputType.multiline,
+          maxLines: 4,
+          placeholder: 'ed2kNodesDatHint'.tr,
+          onChanged: (value) async {
+            downloaderCfg.update((val) => val!.protocolConfig.ed2k.nodesDat = Util.textToLines(value).join(','));
+            await debounceSave();
+          },
+        );
+      },
+    );
+
     // ui config items start
     Widget buildTheme() {
       return _SettingItem(
@@ -1509,6 +1637,16 @@ class SettingView extends GetView<SettingController> {
             buildBtTrackers(),
             buildBtSeedConfig(),
             ?buildBtDefaultClientConfig(),
+          ],
+        ),
+        _SettingSection(
+          sectionTitle: 'ed2k'.tr,
+          children: [
+            buildEd2kListenPort(),
+            buildEd2kUdpPort(),
+            buildEd2kServerAddr(),
+            buildEd2kServerMet(),
+            buildEd2kNodesDat(),
           ],
         ),
         _SettingSection(sectionTitle: 'ui'.tr, children: [buildTheme(), buildLocale()]),

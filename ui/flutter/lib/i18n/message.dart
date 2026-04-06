@@ -18,6 +18,8 @@ import 'langs/es_es.dart';
 import 'langs/uk_ua.dart';
 import 'langs/hu_hu.dart';
 import 'langs/pt_br.dart';
+import 'langs/ca_es.dart';
+import 'langs/ar_ar.dart';
 
 final messages = _Messages();
 
@@ -42,6 +44,8 @@ class _Messages extends Translations {
         ...ukUA,
         ...huHU,
         ...ptBR,
-        ...deDE
+        ...deDE,
+        ...caES,
+        ...arAR,
       };
 }

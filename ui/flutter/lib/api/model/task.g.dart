@@ -43,6 +43,7 @@ Map<String, dynamic> _$TaskToJson(Task instance) {
 const _$ProtocolEnumMap = {
   Protocol.http: 'http',
   Protocol.bt: 'bt',
+  Protocol.ed2k: 'ed2k',
 };
 
 const _$StatusEnumMap = {

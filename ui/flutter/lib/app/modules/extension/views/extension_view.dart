@@ -1,6 +1,3 @@
-import 'dart:io';
-
-import 'package:badges/badges.dart' as badges;
 import 'package:file_picker/file_picker.dart';
 import 'package:fluent_ui/fluent_ui.dart' hide FluentIcons;
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
@@ -8,42 +5,43 @@ import 'package:flutter/services.dart';
 import 'package:flutter_form_builder/flutter_form_builder.dart';
 import 'package:form_builder_validators/form_builder_validators.dart';
 import 'package:get/get.dart';
+import 'package:gopeed/api/model/store_extension.dart';
+import 'package:gopeed/app/modules/extension/views/extension_card.dart';
+import 'package:gopeed/app/modules/extension/views/extension_detail_view.dart' show ExtensionDetailDrawer;
 import 'package:gopeed/app/views/filled_button_loading.dart';
 import 'package:gopeed/app/views/fluent/base_pane_body.dart';
-import 'package:gopeed/app/views/fluent/universal_list_item.dart';
 import 'package:gopeed/app/views/fluent/universal_pane_child.dart';
-import 'package:gopeed/theme/theme.dart';
-import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../api/api.dart';
 import '../../../../api/model/extension.dart';
 import '../../../../api/model/install_extension.dart';
-import '../../../../api/model/switch_extension.dart';
 import '../../../../api/model/update_extension_settings.dart';
-import '../../../../database/database.dart';
 import '../../../../util/message.dart';
 import '../../../../util/util.dart';
 import '../../../views/icon_button_loading.dart';
-import '../../../views/responsive_builder.dart';
 import '../controllers/extension_controller.dart';
 
 class ExtensionView extends GetView<ExtensionController> {
   ExtensionView({Key? key}) : super(key: key);
 
   final _installUrlController = TextEditingController();
+  final _searchController = TextEditingController();
   final _installBtnController = IconButtonLoadingController();
 
   Future<void> _doInstall(BuildContext context) async {
-    if (_installUrlController.text.isEmpty) {
+    final url = _installUrlController.text.trim();
+    if (url.isEmpty) {
       controller.tryOpenDevMode();
+      return;
+    }
+    if (controller.busyExtensionIds.contains(ExtensionController.manualInstallBusyKey)) {
       return;
     }
     _installBtnController.start();
     try {
-      await installExtension(InstallExtension(url: _installUrlController.text));
+      await controller.installFromUrl(url);
       if (context.mounted) showMessage(context, 'tip'.tr, 'extensionInstallSuccess'.tr);
-      await controller.load();
     } catch (e) {
       if (context.mounted) showErrorMessage(context, e);
     } finally {
@@ -51,20 +49,40 @@ class ExtensionView extends GetView<ExtensionController> {
     }
   }
 
+  Future<void> _installFromFolder(BuildContext context) async {
+    if (controller.busyExtensionIds.contains(ExtensionController.manualInstallBusyKey)) {
+      return;
+    }
+    final dir = await FilePicker.platform.getDirectoryPath();
+    if (dir == null) return;
+    try {
+      await controller.installFromUrl(dir, devInstall: true);
+      if (context.mounted) showMessage(context, 'tip'.tr, 'extensionInstallSuccess'.tr);
+    } catch (e) {
+      if (context.mounted) showErrorMessage(context, e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Handle pending install extension from deep link
     final args = Get.rootDelegate.arguments();
     if (args is InstallExtension && !controller.pendingInstallHandled) {
       controller.pendingInstallHandled = true;
       _installUrlController.text = args.url;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _doInstall(context);
-      });
+      WidgetsBinding.instance.addPostFrameCallback((_) => _doInstall(context));
     }
+
     return BasePaneBody(
       title: 'extensions'.tr,
       titleActions: [
+        Tooltip(
+          message: 'extensionManualInstall'.tr,
+          child: IconButton(
+            icon: const Icon(FluentIcons.wrench_settings_24_regular, size: 24.0),
+            onPressed: controller.toggleInstallTools,
+          ),
+        ),
+        const SizedBox(width: 16),
         Tooltip(
           message: 'extensionFind'.tr,
           child: IconButton(
@@ -78,249 +96,320 @@ class ExtensionView extends GetView<ExtensionController> {
         Tooltip(
           message: 'extensionDevelop'.tr,
           child: IconButton(
-            icon: const Icon(FluentIcons.window_dev_tools_24_regular, size: 24.0),
-            onPressed: () => launchUrl(Uri.parse('https://docs.gopeed.com/dev-extension.html')),
+            icon: const Icon(FluentIcons.chat_help_24_regular, size: 24.0),
+            onPressed: () => launchUrl(Uri.parse('https://gopeed.com/docs/dev-extension')),
           ),
         ),
       ],
-      body: Column(
-        children: [
-          const SizedBox(height: 16),
-          UniversalPaneChild(
-            child: Obx(
-              () => Row(
-                spacing: 12,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: InfoLabel(
-                      label: 'extensionInstallUrl'.tr,
-                      child: TextBox(placeholder: 'url'.tr, controller: _installUrlController),
-                    ),
-                  ),
-                  Tooltip(
-                    message: 'install'.tr,
-                    child: IconButtonLoading(
-                      controller: _installBtnController,
-                      onPressed: () => _doInstall(context),
-                      icon: const Icon(FluentIcons.arrow_download_20_regular, size: 20.0),
-                    ),
-                  ),
-                  controller.devMode.value && Util.isDesktop()
-                      ? Tooltip(
-                          message: 'installFromFolder'.tr,
-                          child: IconButton(
-                            icon: const Icon(FluentIcons.folder_add_20_regular, size: 20.0),
-                            onPressed: () async {
-                              var dir = await FilePicker.platform.getDirectoryPath();
-                              if (dir != null) {
-                                try {
-                                  await installExtension(InstallExtension(devMode: true, url: dir));
-                                  if (context.mounted) showMessage(context, 'tip'.tr, 'extensionInstallSuccess'.tr);
-                                  await controller.load();
-                                } catch (e) {
-                                  if (context.mounted) showErrorMessage(context, e);
-                                }
-                              }
-                            },
-                          ),
-                        )
-                      : Container(),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: Obx(
-              () => ListView.builder(
-                physics: const BouncingScrollPhysics(),
-                itemCount: controller.extensions.length,
-                itemBuilder: (context, index) {
-                  final extension = controller.extensions[index];
-                  return UniversalPaneChild(child: _ExtensionItem(key: Key('extension-$index'), extension, controller));
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-///普通扩展项
-class _ExtensionItem extends StatelessWidget {
-  _ExtensionItem(this.extension, this.controller, {super.key});
-
-  final Extension extension;
-  final ExtensionController controller;
-
-  final menuController = FlyoutController();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = FluentTheme.of(context);
-    final subTitleStyle = theme.typography.caption;
-    return UniversalListItem(
-      backgroundColor: getCardBackgroundColor(FluentTheme.of(context)),
-      leading: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 16, 12, 16),
-        child: SizedBox(
-          width: 48.0,
-          height: 48.0,
-          child: extension.icon.isEmpty
-              ? Image.asset("assets/extension/default_icon.png", fit: BoxFit.cover)
-              : Util.isWeb()
-              ? Image.network(
-                  join('/fs/extensions/${extension.identity}/${extension.icon}'),
-                  fit: BoxFit.cover,
-                  headers: {'Authorization': 'Bearer ${Database.instance.getWebToken()}'},
-                )
-              : Image.file(
-                  extension.devMode
-                      ? File(path.join(extension.devPath, extension.icon))
-                      : File(path.join(Util.getStorageDir(), "extensions", extension.identity, extension.icon)),
-                  fit: BoxFit.cover,
-                ),
-        ),
-      ),
-      title: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 16, 12, 16),
-        child: Column(
-          spacing: 4,
-          crossAxisAlignment: CrossAxisAlignment.start,
+      body: Obx(
+        () => Column(
           children: [
-            Text.rich(
-              TextSpan(
+            const SizedBox(height: 16),
+            UniversalPaneChild(child: _buildMarketToolbar(context)),
+            if (controller.showInstallTools.value) ...[
+              const SizedBox(height: 16),
+              UniversalPaneChild(
+                child: Row(
+                  spacing: 12,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: InfoLabel(
+                        label: 'extensionInstallUrl'.tr,
+                        child: TextBox(placeholder: 'url'.tr, controller: _installUrlController),
+                      ),
+                    ),
+                    Tooltip(
+                      message: 'install'.tr,
+                      child: IconButtonLoading(
+                        controller: _installBtnController,
+                        onPressed: () => _doInstall(context),
+                        icon: const Icon(FluentIcons.arrow_download_20_regular, size: 20.0),
+                      ),
+                    ),
+                    if (controller.devMode.value && Util.isDesktop())
+                      Tooltip(
+                        message: 'extensionLoadLocal'.tr,
+                        child: IconButton(
+                          icon: const Icon(FluentIcons.folder_add_20_regular, size: 20.0),
+                          onPressed: () => _installFromFolder(context),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Obx(() => UniversalPaneChild(child: _buildFilterBar(context))),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView(
                 children: [
-                  TextSpan(text: extension.title, style: theme.typography.body),
-                  WidgetSpan(child: buildChip('v${extension.version}')),
-                  if (extension.devMode) WidgetSpan(child: buildChip('dev', dev: true)),
+                  UniversalPaneChild(child: _buildUnifiedGrid(context)),
+                  if (controller.listFilter.value == ExtensionListFilter.market &&
+                      controller.storePagination.value?.hasNext == true) ...[
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.center,
+                      child: Button(
+                        onPressed: controller.loadingMoreStore.value ? null : controller.loadMoreStore,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          spacing: 8,
+                          children: [
+                            controller.loadingMoreStore.value
+                                ? const SizedBox(width: 14, height: 14, child: ProgressRing(strokeWidth: 2))
+                                : const Icon(FluentIcons.chevron_circle_down_16_regular, size: 14.0),
+                            Text('extensionLoadMore'.tr),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (controller.listFilter.value == ExtensionListFilter.market &&
+                      controller.storePagination.value != null &&
+                      controller.storeExtensions.isNotEmpty &&
+                      controller.storePagination.value!.hasNext == false) ...[
+                    const SizedBox(height: 12),
+                    Center(
+                      child: Text(
+                        'extensionNoMore'.tr,
+                        style: FluentTheme.of(context).typography.caption?.copyWith(color: Get.theme.hintColor),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
-            ResponsiveBuilder.isNarrow(context)
-                ? Text(extension.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: subTitleStyle)
-                : Text(extension.description, style: subTitleStyle),
           ],
         ),
       ),
-      trailing: Row(
-        spacing: 12.0,
-        children: [
-          ToggleSwitch(
-            checked: !extension.disabled,
-            leadingContent: true,
-            content: Text(extension.disabled ? 'disable'.tr : 'enable'.tr),
-            onChanged: (value) async {
+    );
+  }
+
+  Widget _buildMarketToolbar(BuildContext context) {
+    return Row(
+      spacing: 8,
+      children: [
+        Expanded(
+          child: TextBox(
+            controller: _searchController,
+            textInputAction: TextInputAction.search,
+            onSubmitted: controller.searchStore,
+            placeholder: '搜索扩展...',
+          ),
+        ),
+        _buildSortTabs(context),
+        Tooltip(
+          message: 'search'.tr,
+          child: IconButton(
+            onPressed: () => controller.searchStore(_searchController.text),
+            icon: const Icon(FluentIcons.search_24_regular, size: 24.0),
+          ),
+        ),
+        Tooltip(
+          message: 'update'.tr,
+          child: IconButton(
+            onPressed: controller.refreshStore,
+            icon: const Icon(FluentIcons.arrow_clockwise_24_regular, size: 24.0),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSortTabs(BuildContext context) {
+    return ComboBox<StoreExtensionSort>(
+      value: controller.storeSort.value,
+      items: StoreExtensionSort.values.map((e) {
+        return ComboBoxItem(
+          value: e,
+          child: Text(switch (e) {
+            StoreExtensionSort.stars => 'extensionSortStars'.tr,
+            StoreExtensionSort.installs => 'extensionSortInstalls'.tr,
+            StoreExtensionSort.updated => 'extensionSortUpdated'.tr,
+          }),
+        );
+      }).toList(),
+      onChanged: (sort) {
+        if (sort != null) controller.changeSort(sort);
+      },
+    );
+  }
+
+  Widget _buildFilterBar(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    Widget option(ExtensionListFilter filter, String text) {
+      final selected = controller.listFilter.value == filter;
+      return HoverButton(
+        onPressed: () => controller.changeFilter(filter),
+        builder: (context, state) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            constraints: const BoxConstraints(minWidth: 75),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              border: BoxBorder.all(color: selected ? theme.accentColor : theme.resources.dividerStrokeColorDefault),
+              color: () {
+                if (selected) return null;
+                final color = theme.resources.cardBackgroundFillColorDefault;
+                if (state.contains(WidgetState.hovered)) {
+                  return color.withValues(alpha: 0.1);
+                }
+                if (state.contains(WidgetState.pressed)) {
+                  return color.withValues(alpha: 0.2);
+                }
+                return null;
+              }(),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              text,
+              style: TextStyle(
+                color: selected ? theme.accentColor : null,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    final left = Row(
+      mainAxisAlignment: MainAxisAlignment.start,
+      spacing: 8,
+      children: [
+        option(ExtensionListFilter.market, 'extensionFilterMarket'.tr),
+        const SizedBox(width: 8),
+        option(ExtensionListFilter.installed, 'extensionFilterInstalled'.tr),
+      ],
+    );
+
+    return left;
+  }
+
+  Widget _buildUnifiedGrid(BuildContext context) {
+    final items = controller.displayItems;
+    final loading = controller.loadingInstalled.value || controller.loadingStore.value;
+    if (loading && items.isEmpty) {
+      return const Center(child: ProgressRing());
+    }
+    if (items.isEmpty) {
+      return Padding(padding: const EdgeInsets.symmetric(vertical: 24), child: Text('extensionStoreEmpty'.tr));
+    }
+
+    return ListView.builder(
+      physics: const BouncingScrollPhysics(),
+      itemCount: items.length,
+      shrinkWrap: true,
+      itemBuilder: (context, index) => _buildUnifiedCard(context, items[index]),
+    );
+  }
+
+  Widget _buildUnifiedCard(BuildContext context, ExtensionListItem item) {
+    final installed = item.installed;
+    final store = item.store;
+    final canUpdate = controller.canUpdateItem(item);
+    final busy = controller.busyExtensionIds.contains(item.id);
+
+    return ExtensionCard(
+      item: item,
+      busy: busy,
+      canUpdate: canUpdate,
+      onTap: store != null ? () => _showExtensionDrawer(item) : null,
+      onToggle: installed == null
+          ? null
+          : (value) async {
               try {
-                await switchExtension(extension.identity, SwitchExtension(status: value));
-                await controller.load();
+                await controller.toggleExtension(installed, value);
               } catch (e) {
                 if (context.mounted) showErrorMessage(context, e);
               }
             },
-          ),
-          Obx(() {
-            final haveExtUpdate = controller.updateFlags.containsKey(extension.identity);
-
-            final moreIconButton = IconButton(
-              icon: const Icon(FluentIcons.more_horizontal_24_regular, size: 24.0),
-              onPressed: () {
-                menuController.showFlyout(
-                  autoModeConfiguration: FlyoutAutoConfiguration(preferredMode: FlyoutPlacementMode.bottomCenter),
-                  barrierDismissible: true,
-                  dismissOnPointerMoveAway: false,
-                  dismissWithEsc: true,
-                  navigatorKey: Get.key.currentState,
-                  builder: (ctx) {
-                    return MenuFlyout(
-                      items: [
-                        MenuFlyoutItem(
-                          leading: haveExtUpdate
-                              ? badges.Badge(
-                                  position: badges.BadgePosition.topEnd(),
-                                  child: const Icon(FluentIcons.arrow_sync_16_regular, size: 16.0),
-                                )
-                              : const Icon(FluentIcons.arrow_sync_16_regular, size: 16.0),
-                          text: Text('update'.tr),
-                          onPressed: () {
-                            if (haveExtUpdate) {
-                              _showUpdateDialog(extension).then((_) {
-                                if (ctx.mounted) Flyout.of(ctx).close();
-                              });
-                            } else {
-                              showMessage(context, 'tip'.tr, 'extensionAlreadyLatest'.tr);
-                            }
-                          },
-                        ),
-                        const MenuFlyoutSeparator(),
-                        if (extension.homepage.isNotEmpty == true)
-                          MenuFlyoutItem(
-                            leading: const Icon(FluentIcons.home_16_regular, size: 16.0),
-                            text: Text('homepage'.tr),
-                            onPressed: () => launchUrl(Uri.parse(extension.homepage)),
-                          ),
-                        if (extension.repository?.url.isNotEmpty == true)
-                          MenuFlyoutItem(
-                            leading: const Icon(FluentIcons.code_16_regular, size: 16.0),
-                            text: Text('repository'.tr),
-                            onPressed: () => launchUrl(Uri.parse(extension.repository!.url)),
-                          ),
-                        if (extension.homepage.isNotEmpty == true || extension.repository?.url.isNotEmpty == true)
-                          const MenuFlyoutSeparator(),
-                        MenuFlyoutItem(
-                          leading: const Icon(FluentIcons.delete_16_regular, size: 16.0),
-                          text: Text('delete'.tr),
-                          onPressed: () {
-                            _showDeleteDialog(context, extension).then((_) {
-                              if (ctx.mounted) Flyout.of(ctx).close();
-                            });
-                          },
-                        ),
-                        if (extension.settings?.isNotEmpty == true)
-                          MenuFlyoutItem(
-                            leading: const Icon(FluentIcons.settings_16_regular, size: 16.0),
-                            text: Text('setting'.tr),
-                            onPressed: () {
-                              _showSettingDialog(context, extension).then((_) {
-                                if (ctx.mounted) Flyout.of(ctx).close();
-                              });
-                            },
-                          ),
-                      ],
-                    );
-                  },
-                );
-              },
-            );
-
-            return FlyoutTarget(
-              controller: menuController,
-              child: haveExtUpdate
-                  ? badges.Badge(position: badges.BadgePosition.topEnd(top: 1, end: 1), child: moreIconButton)
-                  : moreIconButton,
-            );
-          }),
-        ],
-      ),
+      onOpenSetting: installed != null && installed.settings?.isNotEmpty == true
+          ? () => _showSettingDialog(context, installed)
+          : null,
+      onUpdate: installed != null && canUpdate
+          ? () async {
+              try {
+                await controller.upgradeExtension(installed);
+                if (context.mounted) showMessage(context, 'tip'.tr, 'extensionUpdateSuccess'.tr);
+              } catch (e) {
+                if (context.mounted) showErrorMessage(context, e);
+              }
+            }
+          : null,
+      onDelete: installed != null ? () => _showDeleteDialog(context, installed) : null,
+      onInstall: !item.isInstalled && store != null
+          ? () async {
+              try {
+                await controller.installFromStore(store);
+                if (context.mounted) showMessage(context, 'tip'.tr, 'extensionInstallSuccess'.tr);
+              } catch (e) {
+                if (context.mounted) showErrorMessage(context, e);
+              }
+            }
+          : null,
     );
   }
 
-  Widget buildChip(String text, {bool dev = false}) {
-    return Builder(
-      builder: (context) {
-        final theme = FluentTheme.of(context);
-        final textColor = dev ? theme.accentColor : null;
-        final bgColor = dev ? theme.accentColor.withValues(alpha: 0.2) : theme.resources.subtleFillColorSecondary;
-        return Container(
-          margin: const EdgeInsets.only(left: 8),
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), color: bgColor),
-          child: Text(text, style: TextStyle(fontSize: 12, color: textColor)),
-        );
+  Future<void> _showExtensionDrawer(ExtensionListItem item) async {
+    final store = item.store;
+    if (store == null) return;
+    await showDialog(
+      context: Get.context!,
+      barrierDismissible: true,
+      barrierLabel: 'close',
+      barrierColor: const Color(0x8A000000),
+      transitionDuration: const Duration(milliseconds: 180),
+      builder: (BuildContext context) {
+        return ExtensionDetailDrawer(extension: store, installed: item.installed);
       },
+    );
+  }
+
+  Future<void> _showSettingDialog(BuildContext context, Extension extension) async {
+    final formKey = GlobalKey<FormBuilderState>();
+    final confrimController = FilledButtonLoadingController();
+
+    return showDialog<void>(
+      context: Get.context!,
+      barrierDismissible: false,
+      builder: (dialogContext) => ContentDialog(
+        title: Text('setting'.tr),
+        content: FormBuilder(
+          key: formKey,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Column(spacing: 16, children: extension.settings!.map((e) => _buildSettingItem(e)).toList()),
+          ),
+        ),
+
+        actions: [
+          FilledButtonLoading(
+            onPressed: () async {
+              try {
+                confrimController.start();
+                if (formKey.currentState?.saveAndValidate() == true) {
+                  await updateExtensionSettings(
+                    extension.identity,
+                    UpdateExtensionSettings(settings: formKey.currentState!.value),
+                  );
+                  await controller.loadInstalled(refreshUpdates: false);
+                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                }
+              } catch (e) {
+                if (context.mounted) showErrorMessage(context, e);
+              } finally {
+                confrimController.stop();
+              }
+            },
+            controller: confrimController,
+            child: Text('confirm'.tr),
+          ),
+          Button(onPressed: () => Navigator.of(dialogContext).pop(), child: Text('cancel'.tr)),
+        ],
+      ),
     );
   }
 
@@ -456,37 +545,6 @@ class _ExtensionItem extends StatelessWidget {
     }
   }
 
-  Future<void> _showUpdateDialog(Extension extension) {
-    final confrimController = FilledButtonLoadingController();
-    return showDialog<void>(
-      context: Get.context!,
-      builder: (dialogContext) => ContentDialog(
-        content: Text('newVersionTitle'.trParams({'version': 'v${controller.updateFlags[extension.identity]!}'})),
-        actions: [
-          FilledButtonLoading(
-            controller: confrimController,
-            onPressed: () async {
-              confrimController.start();
-              try {
-                await updateExtension(extension.identity);
-                await controller.load();
-                controller.updateFlags.remove(extension.identity);
-                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-                if (dialogContext.mounted) showMessage(dialogContext, 'tip'.tr, 'extensionUpdateSuccess'.tr);
-              } catch (e) {
-                if (dialogContext.mounted) showErrorMessage(dialogContext, e);
-              } finally {
-                confrimController.stop();
-              }
-            },
-            child: Text('newVersionUpdate'.tr),
-          ),
-          Button(onPressed: () => Navigator.of(dialogContext).pop(), child: Text('newVersionLater'.tr)),
-        ],
-      ),
-    );
-  }
-
   Future<void> _showDeleteDialog(BuildContext context, Extension extension) {
     return showDialog<void>(
       context: Get.context!,
@@ -498,8 +556,7 @@ class _ExtensionItem extends StatelessWidget {
             child: Text('confirm'.tr),
             onPressed: () async {
               try {
-                await deleteExtension(extension.identity);
-                await controller.load();
+                await controller.removeExtension(extension);
                 if (dialogContext.mounted) Navigator.of(dialogContext).pop();
               } catch (e) {
                 if (context.mounted) showErrorMessage(context, e);
@@ -507,52 +564,6 @@ class _ExtensionItem extends StatelessWidget {
             },
           ),
           Button(child: Text('cancel'.tr), onPressed: () => Navigator.of(dialogContext).pop()),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showSettingDialog(BuildContext context, Extension extension) async {
-    final formKey = GlobalKey<FormBuilderState>();
-    final confrimController = FilledButtonLoadingController();
-
-    return showDialog<void>(
-      context: Get.context!,
-      barrierDismissible: false,
-      builder: (dialogContext) => ContentDialog(
-        title: Text('setting'.tr),
-        content: FormBuilder(
-          key: formKey,
-          // autovalidateMode: AutovalidateMode.always,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Column(spacing: 16, children: extension.settings!.map((e) => _buildSettingItem(e)).toList()),
-          ),
-        ),
-
-        actions: [
-          FilledButtonLoading(
-            onPressed: () async {
-              try {
-                confrimController.start();
-                if (formKey.currentState?.saveAndValidate() == true) {
-                  await updateExtensionSettings(
-                    extension.identity,
-                    UpdateExtensionSettings(settings: formKey.currentState!.value),
-                  );
-                  await controller.load();
-                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-                }
-              } catch (e) {
-                if (context.mounted) showErrorMessage(context, e);
-              } finally {
-                confrimController.stop();
-              }
-            },
-            controller: confrimController,
-            child: Text('confirm'.tr),
-          ),
-          Button(onPressed: () => Navigator.of(dialogContext).pop(), child: Text('cancel'.tr)),
         ],
       ),
     );

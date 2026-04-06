@@ -252,48 +252,60 @@ class AppController extends GetxController with WindowListener, TrayListener {
     } else {
       await trayManager.setIcon('assets/tray_icon/icon.png');
     }
-    final menu = Menu(
-      items: [
-        MenuItem(label: "show".tr, onClick: (menuItem) async => {await windowManager.show()}),
-        MenuItem.separator(),
-        MenuItem(
-          label: "create".tr,
-          onClick: (menuItem) async => {
-            await windowManager.show(),
-            await Get.rootDelegate.offAndToNamed(Routes.CREATE),
-          },
-        ),
-        MenuItem(label: "startAll".tr, onClick: (menuItem) async => {continueAllTasks(null)}),
-        MenuItem(label: "pauseAll".tr, onClick: (menuItem) async => {pauseAllTasks(null)}),
-        MenuItem(
-          label: 'setting'.tr,
-          onClick: (menuItem) async => {
-            await windowManager.show(),
-            await Get.rootDelegate.offAndToNamed(Routes.SETTING),
-          },
-        ),
-        MenuItem.separator(),
-        MenuItem(
-          label: 'donate'.tr,
-          onClick: (menuItem) => {
-            launchUrl(Uri.parse("https://docs.gopeed.com/donate.html"), mode: LaunchMode.externalApplication),
-          },
-        ),
-        MenuItem(label: '${"version".tr}（${packageInfo.version}）'),
-        MenuItem.separator(),
-        MenuItem(
-          label: 'exit'.tr,
-          onClick: (menuItem) async {
-            try {
-              await LibgopeedBoot.instance.stop();
-            } catch (e) {
-              logger.w("libgopeed stop fail", e);
-            }
-            windowManager.destroy();
-          },
-        ),
-      ],
-    );
+    final menu = Menu(items: [
+      MenuItem(
+        label: "show".tr,
+        onClick: (menuItem) async => {
+          await windowManager.show(),
+        },
+      ),
+      MenuItem.separator(),
+      MenuItem(
+        label: "create".tr,
+        onClick: (menuItem) async => {
+          await windowManager.show(),
+          await Get.rootDelegate.offAndToNamed(Routes.CREATE),
+        },
+      ),
+      MenuItem(
+        label: "startAll".tr,
+        onClick: (menuItem) async => {continueAllTasks(null)},
+      ),
+      MenuItem(
+        label: "pauseAll".tr,
+        onClick: (menuItem) async => {pauseAllTasks(null)},
+      ),
+      MenuItem(
+        label: 'setting'.tr,
+        onClick: (menuItem) async => {
+          await windowManager.show(),
+          await Get.rootDelegate.offAndToNamed(Routes.SETTING),
+        },
+      ),
+      MenuItem.separator(),
+      MenuItem(
+        label: 'donate'.tr,
+        onClick: (menuItem) => {
+          launchUrl(Uri.parse("https://gopeed.com/docs/donate"),
+              mode: LaunchMode.externalApplication)
+        },
+      ),
+      MenuItem(
+        label: '${"version".tr}（${packageInfo.version}）',
+      ),
+      MenuItem.separator(),
+      MenuItem(
+        label: 'exit'.tr,
+        onClick: (menuItem) async {
+          try {
+            await LibgopeedBoot.instance.stop();
+          } catch (e) {
+            logger.w("libgopeed stop fail", e);
+          }
+          windowManager.destroy();
+        },
+      ),
+    ]);
     if (!Util.isLinux()) {
       // Linux seems not support setToolTip, refer to: https://github.com/GopeedLab/gopeed/issues/241
       await trayManager.setToolTip('Gopeed');
